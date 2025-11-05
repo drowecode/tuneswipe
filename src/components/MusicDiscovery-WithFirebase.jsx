@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react'
 import { Heart, ThumbsUp, Meh, ThumbsDown, TrendingUp, Music, User, BarChart3, Sliders, Plus } from 'lucide-react'
 import './MusicDiscovery.css'
+import { createUserProfile, savePreference, getUserPreferences, onAuthChange } from './firebase'
 
 const MusicDiscovery = () => {
-  const [username, setUsername] = useState('')
   const [isConnected, setIsConnected] = useState(false)
   const [spotifyToken, setSpotifyToken] = useState(null)
+  const [userId, setUserId] = useState(null)
   const [currentView, setCurrentView] = useState('discover') // discover, stats
   const [discoveryMode, setDiscoveryMode] = useState(50) // 0-100, 0=familiar, 100=exploratory
+  const [isLoading, setIsLoading] = useState(false)
   
   // User data
   const [userStats, setUserStats] = useState(null)
@@ -21,9 +23,10 @@ const MusicDiscovery = () => {
   })
 
   // Spotify API config
-  const SPOTIFY_CLIENT_ID = '317c65a797af484fb3e2af110acdfd72' // User needs to add their own
+  const SPOTIFY_CLIENT_ID = '317c65a797af484fb3e2af110acdfd72' // Your client ID
   const REDIRECT_URI = 'https://www.tuneswipe.xyz'
   const SPOTIFY_AUTH_ENDPOINT = 'https://accounts.spotify.com/authorize'
+  const SPOTIFY_TOKEN_ENDPOINT = 'https://accounts.spotify.com/api/token'
   const SPOTIFY_SCOPES = [
     'user-library-modify',
     'user-library-read',
@@ -31,37 +34,113 @@ const MusicDiscovery = () => {
     'user-read-recently-played'
   ]
 
-  // Stats.fm API config
-  const STATSFM_BASE_URL = 'https://api.stats.fm/api/v1'
+  // PKCE helper functions
+  const generateRandomString = (length) => {
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    const values = crypto.getRandomValues(new Uint8Array(length))
+    return values.reduce((acc, x) => acc + possible[x % possible.length], '')
+  }
 
-  // Check for Spotify token in URL on mount
+  const sha256 = async (plain) => {
+    const encoder = new TextEncoder()
+    const data = encoder.encode(plain)
+    return window.crypto.subtle.digest('SHA-256', data)
+  }
+
+  const base64encode = (input) => {
+    return btoa(String.fromCharCode(...new Uint8Array(input)))
+      .replace(/=/g, '')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+  }
+
+  // Check for authorization code or existing token on mount
   useEffect(() => {
-    const hash = window.location.hash
-    let token = window.localStorage.getItem('spotify_token')
+    const urlParams = new URLSearchParams(window.location.search)
+    const code = urlParams.get('code')
+    const storedToken = window.localStorage.getItem('spotify_token')
+    const tokenExpiry = window.localStorage.getItem('spotify_token_expiry')
 
-    if (!token && hash) {
-      token = hash.substring(1).split('&').find(elem => elem.startsWith('access_token')).split('=')[1]
-
-      window.location.hash = ''
-      window.localStorage.setItem('spotify_token', token)
-    }
-
-    if (token) {
-      setSpotifyToken(token)
-      // Auto-fetch user data if token exists
-      fetchSpotifyUserData(token)
+    // Check if stored token is still valid
+    if (storedToken && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
+      setSpotifyToken(storedToken)
+      fetchSpotifyUserData(storedToken)
+    } else if (code) {
+      // Exchange code for token
+      exchangeCodeForToken(code)
     }
   }, [])
 
-  // Connect to Spotify
-  const connectSpotify = () => {
-    const authUrl = `${SPOTIFY_AUTH_ENDPOINT}?client_id=${SPOTIFY_CLIENT_ID}&redirect_uri=${REDIRECT_URI}&scope=${SPOTIFY_SCOPES.join('%20')}&response_type=token&show_dialog=true`
-    window.location.href = authUrl
+  // Exchange authorization code for access token
+  const exchangeCodeForToken = async (code) => {
+    const codeVerifier = window.localStorage.getItem('code_verifier')
+
+    const payload = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: SPOTIFY_CLIENT_ID,
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: REDIRECT_URI,
+        code_verifier: codeVerifier,
+      }),
+    }
+
+    try {
+      const response = await fetch(SPOTIFY_TOKEN_ENDPOINT, payload)
+      const data = await response.json()
+
+      if (data.access_token) {
+        const expiryTime = Date.now() + (data.expires_in * 1000)
+        window.localStorage.setItem('spotify_token', data.access_token)
+        window.localStorage.setItem('spotify_token_expiry', expiryTime.toString())
+        
+        if (data.refresh_token) {
+          window.localStorage.setItem('spotify_refresh_token', data.refresh_token)
+        }
+
+        setSpotifyToken(data.access_token)
+        
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname)
+        
+        // Fetch user data
+        fetchSpotifyUserData(data.access_token)
+      }
+    } catch (error) {
+      console.error('Error exchanging code for token:', error)
+      alert('Authentication failed. Please try again.')
+    }
+  }
+
+  // Connect to Spotify using PKCE
+  const connectSpotify = async () => {
+    const codeVerifier = generateRandomString(64)
+    const hashed = await sha256(codeVerifier)
+    const codeChallenge = base64encode(hashed)
+
+    window.localStorage.setItem('code_verifier', codeVerifier)
+
+    const params = new URLSearchParams({
+      client_id: SPOTIFY_CLIENT_ID,
+      response_type: 'code',
+      redirect_uri: REDIRECT_URI,
+      scope: SPOTIFY_SCOPES.join(' '),
+      code_challenge_method: 'S256',
+      code_challenge: codeChallenge,
+    })
+
+    window.location.href = `${SPOTIFY_AUTH_ENDPOINT}?${params.toString()}`
   }
 
   // Fetch Spotify user data
   const fetchSpotifyUserData = async (token) => {
     try {
+      setIsLoading(true)
+      
       // Get Spotify user profile
       const profileResponse = await fetch('https://api.spotify.com/v1/me', {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -71,7 +150,10 @@ const MusicDiscovery = () => {
       if (profileResponse.status === 401) {
         // Token expired
         window.localStorage.removeItem('spotify_token')
+        window.localStorage.removeItem('spotify_token_expiry')
         setSpotifyToken(null)
+        setIsConnected(false)
+        setIsLoading(false)
         return
       }
 
@@ -99,20 +181,45 @@ const MusicDiscovery = () => {
         .slice(0, 15)
         .map(([genre]) => ({ name: genre }))
 
-      setUserStats({
+      const userData = {
         username: profile.display_name || profile.id,
         spotifyId: profile.id,
         topArtists: topArtists.items || [],
         topTracks: topTracks.items || [],
         topGenres: topGenres
-      })
+      }
+
+      setUserStats(userData)
+
+      // Create/update Firebase user profile
+      try {
+        const firebaseUserId = await createUserProfile({
+          spotifyId: userData.spotifyId,
+          username: userData.username,
+          topArtists: userData.topArtists.slice(0, 10).map(a => ({ name: a.name, id: a.id })),
+          topGenres: userData.topGenres
+        })
+        setUserId(firebaseUserId)
+
+        // Load user preferences from Firebase
+        const savedPreferences = await getUserPreferences(firebaseUserId)
+        if (savedPreferences) {
+          setUserPreferences(savedPreferences)
+        }
+      } catch (error) {
+        console.error('Firebase error:', error)
+        // Continue without Firebase if there's an error
+      }
 
       setIsConnected(true)
       
       // Get initial recommendations
       await getRecommendations(topArtists.items || [], token)
+      
+      setIsLoading(false)
     } catch (error) {
       console.error('Error fetching Spotify data:', error)
+      setIsLoading(false)
       alert('Error connecting to Spotify. Please try again.')
     }
   }
@@ -187,6 +294,7 @@ const MusicDiscovery = () => {
     if (!currentTrack) return
 
     const trackData = {
+      id: currentTrack.id,
       name: currentTrack.name,
       artist: currentTrack.artists ? currentTrack.artists[0].name : currentTrack.artist,
       uri: currentTrack.uri,
@@ -198,21 +306,31 @@ const MusicDiscovery = () => {
       await addToSpotifyLiked(currentTrack.uri)
     }
 
-    // Update preferences
+    // Update local preferences
     const newPreferences = { ...userPreferences }
     
     switch(reaction) {
       case 'love':
-        newPreferences.loved.push(trackData)
+        newPreferences.loved = [...(newPreferences.loved || []), trackData]
+        // Save to Firebase
+        if (userId) {
+          await savePreference(userId, trackData, 'loved')
+        }
         break
       case 'like':
-        newPreferences.liked.push(trackData)
+        newPreferences.liked = [...(newPreferences.liked || []), trackData]
+        if (userId) {
+          await savePreference(userId, trackData, 'liked')
+        }
         break
       case 'meh':
         // Don't save meh reactions
         break
       case 'dislike':
-        newPreferences.disliked.push(trackData)
+        newPreferences.disliked = [...(newPreferences.disliked || []), trackData]
+        if (userId) {
+          await savePreference(userId, trackData, 'disliked')
+        }
         break
       default:
         break
@@ -254,21 +372,30 @@ const MusicDiscovery = () => {
           </div>
 
           <div className="login-form">
-            <button onClick={connectSpotify} className="connect-button spotify-button">
-              <Music size={24} />
-              Connect your Spotify
-            </button>
-            
-            <div className="info-box">
-              <p><strong>What you'll get:</strong></p>
-              <ul>
-                <li>Personalized music recommendations</li>
-                <li>Add songs directly to your Spotify Liked Songs</li>
-                <li>View your listening stats and top tracks</li>
-                <li>Discovery mode that learns your taste</li>
-              </ul>
-              <p className="permission-note">We'll only access your listening history and ability to save songs.</p>
-            </div>
+            {isLoading ? (
+              <div className="loading-state">
+                <Music size={48} className="spinning" />
+                <p>Setting up your profile...</p>
+              </div>
+            ) : (
+              <>
+                <button onClick={connectSpotify} className="connect-button spotify-button">
+                  <Music size={24} />
+                  Connect with Spotify
+                </button>
+                
+                <div className="info-box">
+                  <p><strong>What you'll get:</strong></p>
+                  <ul>
+                    <li>Personalized music recommendations</li>
+                    <li>Add songs directly to your Spotify Liked Songs</li>
+                    <li>View your listening stats and top tracks</li>
+                    <li>Discovery mode that learns your taste</li>
+                  </ul>
+                  <p className="permission-note">We'll only access your listening history and ability to save songs.</p>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
