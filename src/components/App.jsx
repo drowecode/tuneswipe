@@ -249,14 +249,14 @@ const MusicDiscovery = () => {
         <div className="login-card">
           <div className="logo-section">
             <Music size={64} className="logo-icon" />
-            <h1>MusicMind</h1>
+            <h1>TuneSwipe</h1>
             <p>Discover music that adapts to your taste</p>
           </div>
 
           <div className="login-form">
             <button onClick={connectSpotify} className="connect-button spotify-button">
               <Music size={24} />
-              Connect with Spotify
+              Connect your Spotify
             </button>
             
             <div className="info-box">
@@ -283,7 +283,7 @@ const MusicDiscovery = () => {
         <div className="header-content">
           <div className="header-left">
             <Music size={32} />
-            <h2>MusicMind</h2>
+            <h2>TuneSwipe</h2>
           </div>
           <div className="header-right">
             <button 
