@@ -6,7 +6,7 @@
 
 .app-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #000000;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
 }
 
@@ -28,7 +28,7 @@
 }
 
 .logo-icon {
-  color: white;
+  color: #1DB954;
   margin-bottom: 1rem;
   animation: float 3s ease-in-out infinite;
 }
@@ -42,31 +42,35 @@
   font-size: 3rem;
   margin: 0.5rem 0;
   font-weight: 800;
+  color: white;
 }
 
 .logo-section p {
   font-size: 1.2rem;
-  opacity: 0.9;
+  opacity: 0.7;
+  color: #b3b3b3;
 }
 
 .login-form {
-  background: white;
+  background: #181818;
   padding: 2rem;
   border-radius: 1rem;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
 .login-form label {
   display: block;
   font-weight: 600;
   margin-bottom: 0.5rem;
-  color: #333;
+  color: white;
 }
 
 .username-input {
   width: 100%;
   padding: 0.875rem;
-  border: 2px solid #e5e7eb;
+  border: 2px solid #282828;
+  background: #121212;
+  color: white;
   border-radius: 0.5rem;
   font-size: 1rem;
   margin-bottom: 1rem;
@@ -75,20 +79,20 @@
 
 .username-input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: #1DB954;
 }
 
 .connect-button {
   width: 100%;
   padding: 1rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #1DB954;
   color: white;
   border: none;
-  border-radius: 0.5rem;
+  border-radius: 2rem;
   font-size: 1.1rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -96,12 +100,13 @@
 }
 
 .spotify-button {
-  background: linear-gradient(135deg, #1DB954 0%, #1ed760 100%);
+  background: #1DB954;
 }
 
 .connect-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+  background: #1ed760;
+  box-shadow: 0 10px 20px rgba(29, 185, 84, 0.4);
 }
 
 .spotify-button:hover {
@@ -115,19 +120,22 @@
 .info-box {
   margin-top: 1.5rem;
   padding: 1rem;
-  background: #f3f4f6;
+  background: #121212;
   border-radius: 0.5rem;
   font-size: 0.875rem;
-  color: #666;
+  color: #b3b3b3;
+  border: 1px solid #282828;
 }
 
 .info-box p {
   margin: 0.5rem 0;
+  color: white;
 }
 
 .info-box ul {
   margin: 0.5rem 0;
   padding-left: 1.5rem;
+  color: #b3b3b3;
 }
 
 .info-box li {
@@ -137,14 +145,14 @@
 .permission-note {
   font-size: 0.75rem;
   font-style: italic;
-  color: #999;
+  color: #666;
 }
 
 /* Header */
 .app-header {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  background: #000000;
+  border-bottom: 1px solid #282828;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -163,13 +171,14 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  color: #667eea;
+  color: #1DB954;
 }
 
 .header-left h2 {
   margin: 0;
   font-size: 1.5rem;
   font-weight: 800;
+  color: white;
 }
 
 .header-right {
@@ -185,19 +194,20 @@
   padding: 0.625rem 1.25rem;
   background: transparent;
   border: 2px solid transparent;
-  border-radius: 0.5rem;
-  color: #666;
+  border-radius: 2rem;
+  color: #b3b3b3;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .nav-button:hover {
-  background: #f3f4f6;
+  background: #181818;
+  color: white;
 }
 
 .nav-button.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #1DB954;
   color: white;
   border-color: transparent;
 }
@@ -207,10 +217,10 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  background: #f3f4f6;
+  background: #181818;
   border-radius: 2rem;
   font-weight: 600;
-  color: #333;
+  color: white;
 }
 
 /* Discovery View */
@@ -221,11 +231,12 @@
 }
 
 .discovery-controls {
-  background: white;
+  background: #181818;
   padding: 1.5rem;
   border-radius: 1rem;
   margin-bottom: 2rem;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  border: 1px solid #282828;
 }
 
 .slider-container label {
@@ -233,7 +244,7 @@
   align-items: center;
   gap: 0.5rem;
   font-weight: 600;
-  color: #333;
+  color: white;
   margin-bottom: 1rem;
 }
 
@@ -241,7 +252,7 @@
   display: flex;
   justify-content: space-between;
   font-size: 0.875rem;
-  color: #666;
+  color: #b3b3b3;
   margin-bottom: 0.5rem;
 }
 
@@ -249,7 +260,7 @@
   width: 100%;
   height: 8px;
   border-radius: 5px;
-  background: linear-gradient(to right, #667eea, #764ba2);
+  background: #282828;
   outline: none;
   appearance: none;
   cursor: pointer;
@@ -260,42 +271,43 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: white;
+  background: #1DB954;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  border: 3px solid #667eea;
+  box-shadow: 0 2px 8px rgba(29, 185, 84, 0.5);
+  border: 3px solid #000;
 }
 
 .discovery-slider::-moz-range-thumb {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: white;
+  background: #1DB954;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  border: 3px solid #667eea;
+  box-shadow: 0 2px 8px rgba(29, 185, 84, 0.5);
+  border: 3px solid #000;
 }
 
 .slider-value {
   text-align: center;
   font-weight: 600;
-  color: #667eea;
+  color: #1DB954;
   margin-top: 0.5rem;
 }
 
 /* Track Card */
 .track-card {
-  background: white;
-  border-radius: 1.5rem;
+  background: #181818;
+  border-radius: 1rem;
   overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
   margin-bottom: 2rem;
+  border: 1px solid #282828;
 }
 
 .track-image {
   width: 100%;
   aspect-ratio: 1;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #000000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -308,8 +320,8 @@
 }
 
 .placeholder-image {
-  color: white;
-  opacity: 0.5;
+  color: #1DB954;
+  opacity: 0.3;
 }
 
 .track-info {
@@ -320,25 +332,25 @@
 .track-info h2 {
   font-size: 1.75rem;
   margin: 0 0 0.5rem 0;
-  color: #1f2937;
+  color: white;
 }
 
 .track-info h3 {
   font-size: 1.25rem;
   margin: 0 0 0.5rem 0;
-  color: #667eea;
+  color: #1DB954;
   font-weight: 600;
 }
 
 .track-album {
   font-size: 1rem;
-  color: #6b7280;
+  color: #b3b3b3;
   margin: 0 0 0.5rem 0;
 }
 
 .track-stats {
   font-size: 0.875rem;
-  color: #9ca3af;
+  color: #666;
   margin: 0 0 1rem 0;
 }
 
@@ -347,11 +359,11 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 1.5rem;
-  background: linear-gradient(135deg, #1DB954 0%, #1ed760 100%);
+  background: #1DB954;
   color: white;
   border: none;
   border-radius: 2rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
   margin-top: 0.5rem;
@@ -360,6 +372,7 @@
 
 .add-to-liked-btn:hover {
   transform: translateY(-2px);
+  background: #1ed760;
   box-shadow: 0 6px 16px rgba(29, 185, 84, 0.4);
 }
 
@@ -378,17 +391,18 @@
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  border: none;
+  border: 2px solid #282828;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 .reaction-btn:hover {
   transform: scale(1.1);
+  border-color: transparent;
 }
 
 .reaction-btn:active {
@@ -396,23 +410,25 @@
 }
 
 .love-btn {
-  background: linear-gradient(135deg, #ec4899, #ef4444);
+  background: #1DB954;
   color: white;
 }
 
 .like-btn {
-  background: linear-gradient(135deg, #10b981, #059669);
+  background: #1DB954;
+  opacity: 0.8;
   color: white;
 }
 
 .meh-btn {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: white;
+  background: #282828;
+  color: #b3b3b3;
 }
 
 .dislike-btn {
-  background: linear-gradient(135deg, #6b7280, #4b5563);
-  color: white;
+  background: #282828;
+  color: #b3b3b3;
+  opacity: 0.6;
 }
 
 .loading-message {
@@ -424,18 +440,20 @@
 .loading-message p {
   margin-top: 1rem;
   font-size: 1.25rem;
+  color: #b3b3b3;
 }
 
 .loading-state {
   text-align: center;
   padding: 2rem;
-  color: #667eea;
+  color: #1DB954;
 }
 
 .loading-state p {
   margin-top: 1rem;
   font-size: 1.125rem;
   font-weight: 600;
+  color: white;
 }
 
 .spinning {
@@ -452,10 +470,11 @@
   display: flex;
   justify-content: center;
   gap: 2rem;
-  background: rgba(255, 255, 255, 0.95);
+  background: #181818;
   padding: 1.5rem;
   border-radius: 1rem;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  border: 1px solid #282828;
 }
 
 .pref-stat {
@@ -463,12 +482,12 @@
   align-items: center;
   gap: 0.5rem;
   font-weight: 600;
-  color: #333;
+  color: white;
 }
 
-.love-color { color: #ec4899; }
-.like-color { color: #10b981; }
-.dislike-color { color: #6b7280; }
+.love-color { color: #1DB954; }
+.like-color { color: #1DB954; opacity: 0.7; }
+.dislike-color { color: #b3b3b3; }
 
 /* Stats View */
 .stats-view {
@@ -490,8 +509,9 @@
 
 .total-scrobbles {
   font-size: 1.25rem;
-  opacity: 0.9;
+  opacity: 0.7;
   margin: 0;
+  color: #b3b3b3;
 }
 
 .stats-grid {
@@ -507,10 +527,11 @@
 }
 
 .stat-section {
-  background: white;
+  background: #181818;
   padding: 1.5rem;
   border-radius: 1rem;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  border: 1px solid #282828;
 }
 
 .stat-section.full-width {
@@ -519,7 +540,7 @@
 
 .stat-section h3 {
   margin: 0 0 1rem 0;
-  color: #667eea;
+  color: #1DB954;
   font-size: 1.25rem;
 }
 
@@ -534,18 +555,19 @@
   align-items: center;
   gap: 1rem;
   padding: 0.75rem;
-  background: #f9fafb;
+  background: #000000;
   border-radius: 0.5rem;
   transition: background 0.2s;
+  border: 1px solid #282828;
 }
 
 .stat-item:hover {
-  background: #f3f4f6;
+  background: #282828;
 }
 
 .stat-rank {
   font-weight: 800;
-  color: #667eea;
+  color: #1DB954;
   min-width: 1.5rem;
 }
 
@@ -564,15 +586,15 @@
 .stat-name {
   flex: 1;
   font-weight: 600;
-  color: #1f2937;
+  color: white;
 }
 
 .stat-genre {
   font-size: 0.75rem;
   padding: 0.25rem 0.75rem;
-  background: #e5e7eb;
+  background: #282828;
   border-radius: 1rem;
-  color: #6b7280;
+  color: #b3b3b3;
   text-transform: capitalize;
 }
 
@@ -584,12 +606,12 @@
 
 .stat-artist {
   font-size: 0.875rem;
-  color: #9ca3af;
+  color: #b3b3b3;
 }
 
 .stat-count {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: #666;
 }
 
 .genre-tags {
@@ -600,12 +622,12 @@
 
 .genre-tag {
   padding: 0.625rem 1rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #1DB954;
   color: white;
   border-radius: 2rem;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.875rem;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 2px 8px rgba(29, 185, 84, 0.3);
 }
 
 /* Responsive */
