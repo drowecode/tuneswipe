@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Heart, ThumbsUp, Meh, ThumbsDown, TrendingUp, Music, User, BarChart3, Sliders, Plus } from 'lucide-react'
-import './MusicDiscovery-Final.css'
-import { createUserProfile, savePreference, getUserPreferences, onAuthChange } from '../firebase'
+import './MusicDiscovery.css'
+import { createUserProfile, savePreference, getUserPreferences, onAuthChange } from './firebase'
 
 const MusicDiscovery = () => {
   const [isConnected, setIsConnected] = useState(false)
@@ -226,46 +226,96 @@ const MusicDiscovery = () => {
 
   // Get recommendations from Spotify
   const getRecommendations = async (topArtists, token) => {
-    if (!topArtists || topArtists.length === 0 || !token) return
+    console.log('getRecommendations called with:', { 
+      topArtistsCount: topArtists?.length, 
+      hasToken: !!token 
+    })
+    
+    if (!topArtists || topArtists.length === 0) {
+      console.error('No top artists available for recommendations')
+      alert('Unable to load recommendations. No top artists found.')
+      return
+    }
+    
+    if (!token) {
+      console.error('No Spotify token available')
+      return
+    }
 
     try {
       // Select seed artists based on discovery mode
       const numFamiliarArtists = Math.floor((1 - discoveryMode / 100) * 3)
       const numExploratoryArtists = 3 - numFamiliarArtists
 
+      console.log('Discovery split:', { numFamiliarArtists, numExploratoryArtists })
+
       // Get familiar seed artists (from top artists)
-      const familiarSeeds = topArtists.slice(0, numFamiliarArtists).map(a => a.id)
+      const familiarSeeds = topArtists.slice(0, Math.max(1, numFamiliarArtists)).map(a => a.id)
       
       // Get exploratory seed artists (from related artists)
       let exploratorySeeds = []
-      if (numExploratoryArtists > 0) {
-        const randomTopArtist = topArtists[Math.floor(Math.random() * Math.min(5, topArtists.length))]
-        const relatedResponse = await fetch(`https://api.spotify.com/v1/artists/${randomTopArtist.id}/related-artists`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-        const related = await relatedResponse.json()
-        exploratorySeeds = related.artists?.slice(0, numExploratoryArtists).map(a => a.id) || []
+      if (numExploratoryArtists > 0 && topArtists.length > 0) {
+        try {
+          const randomTopArtist = topArtists[Math.floor(Math.random() * Math.min(5, topArtists.length))]
+          console.log('Fetching related artists for:', randomTopArtist.name)
+          
+          const relatedResponse = await fetch(`https://api.spotify.com/v1/artists/${randomTopArtist.id}/related-artists`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+          
+          if (!relatedResponse.ok) {
+            console.error('Related artists request failed:', relatedResponse.status)
+          }
+          
+          const related = await relatedResponse.json()
+          exploratorySeeds = related.artists?.slice(0, numExploratoryArtists).map(a => a.id) || []
+        } catch (error) {
+          console.error('Error fetching related artists:', error)
+          // Continue with just familiar seeds if related artists fail
+        }
       }
 
-      const seedArtists = [...familiarSeeds, ...exploratorySeeds].join(',')
+      // Ensure we have at least one seed
+      const allSeeds = [...familiarSeeds, ...exploratorySeeds]
+      const seedArtists = allSeeds.slice(0, 5).join(',') // Spotify allows max 5 seeds
+      
+      console.log('Seed artists:', seedArtists)
+
+      if (!seedArtists) {
+        console.error('No seed artists available')
+        alert('Unable to generate recommendations. Please try again.')
+        return
+      }
 
       // Get recommendations
+      console.log('Fetching recommendations...')
       const recsResponse = await fetch(
         `https://api.spotify.com/v1/recommendations?seed_artists=${seedArtists}&limit=20&min_popularity=20`,
         {
           headers: { 'Authorization': `Bearer ${token}` }
         }
       )
+      
+      if (!recsResponse.ok) {
+        console.error('Recommendations request failed:', recsResponse.status, await recsResponse.text())
+        alert('Failed to load recommendations. Please try reconnecting.')
+        return
+      }
+      
       const recsData = await recsResponse.json()
+      console.log('Recommendations received:', recsData.tracks?.length || 0, 'tracks')
 
-      if (recsData.tracks) {
+      if (recsData.tracks && recsData.tracks.length > 0) {
         setRecommendations(recsData.tracks)
-        if (recsData.tracks.length > 0) {
-          setCurrentTrack(recsData.tracks[0])
-        }
+        setCurrentTrack(recsData.tracks[0])
+        console.log('First track:', recsData.tracks[0].name)
+      } else {
+        console.error('No tracks in recommendations response')
+        alert('No recommendations available. Please try adjusting your discovery mode.')
       }
     } catch (error) {
       console.error('Error getting recommendations:', error)
+      alert('Error loading recommendations. Please check the console and try again.')
     }
   }
 
