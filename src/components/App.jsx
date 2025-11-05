@@ -22,7 +22,7 @@ const MusicDiscovery = () => {
 
   // Spotify API config
   const SPOTIFY_CLIENT_ID = '317c65a797af484fb3e2af110acdfd72' // User needs to add their own
-  const REDIRECT_URI = 'https://tuneswipe.xyz'
+  const REDIRECT_URI = 'https://www.tuneswipe.xyz'
   const SPOTIFY_AUTH_ENDPOINT = 'https://accounts.spotify.com/authorize'
   const SPOTIFY_SCOPES = [
     'user-library-modify',
