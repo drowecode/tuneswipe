@@ -213,8 +213,8 @@ const MusicDiscovery = () => {
 
       setIsConnected(true)
       
-      // Get initial recommendations
-      await getRecommendations(topArtists.items || [], token)
+      // Get initial recommendations once stats are ready
+      await getRecommendations(topArtists.items || [], token);      
       
       setIsLoading(false)
     } catch (error) {
@@ -225,6 +225,7 @@ const MusicDiscovery = () => {
   }
 
 // Cache genre seeds so we only fetch once
+// cache genre seeds so we only fetch once
 let _genreSeeds = null;
 const getGenreSeeds = async (token) => {
   if (_genreSeeds) return _genreSeeds;
@@ -239,17 +240,14 @@ const getRecommendations = async (topArtists, token) => {
   if (!Array.isArray(topArtists) || !topArtists.length || !token) return;
 
   try {
-    // 1) Familiar vs exploratory split
+    // familiar/exploratory split
     const familiarCount = Math.max(1, Math.floor((1 - discoveryMode / 100) * 3));
     const exploratoryCount = Math.max(0, 3 - familiarCount);
 
-    // 2) Familiar artist seeds (clean + dedupe)
-    const familiarSeeds = topArtists
-      .slice(0, familiarCount)
-      .map(a => a?.id)
-      .filter(Boolean);
+    // familiar seeds from top artists
+    const familiarSeeds = topArtists.slice(0, familiarCount).map(a => a?.id).filter(Boolean);
 
-    // 3) Exploratory via related-artists (best-effort)
+    // exploratory seeds via related-artists (best effort)
     let exploratorySeeds = [];
     if (exploratoryCount > 0 && topArtists.length) {
       try {
@@ -264,20 +262,16 @@ const getRecommendations = async (topArtists, token) => {
       } catch { /* ignore */ }
     }
 
-    // 4) Add a couple top TRACK seeds (these are always valid IDs)
-    const trackSeeds = (userStats?.topTracks || [])
-      .slice(0, 2)
-      .map(t => t?.id)
-      .filter(Boolean);
+    // add a couple of reliable track seeds
+    const trackSeeds = (userStats?.topTracks || []).slice(0, 2).map(t => t?.id).filter(Boolean);
 
-    // 5) Build up to 5 total seeds, no empties, no duplicates
+    // dedupe + clamp to Spotify's 5-seed total
     const seed_artists = [...new Set([...familiarSeeds, ...exploratorySeeds])].slice(0, 3);
     const seed_tracks  = trackSeeds.slice(0, 2);
-    const haveSeeds = seed_artists.length + seed_tracks.length > 0;
 
-    // 6) If still thin, fall back to allowed genre seeds only
+    // fallback: allowed genre seeds only
     let seed_genres = [];
-    if (!haveSeeds) {
+    if (seed_artists.length + seed_tracks.length === 0) {
       const allowed = new Set(await getGenreSeeds(token));
       seed_genres = (userStats?.topGenres || [])
         .map(g => g?.name?.toLowerCase().replace(/\s+/g, '-'))
@@ -290,10 +284,9 @@ const getRecommendations = async (topArtists, token) => {
       return;
     }
 
-    // 7) Build query safely
+    // build URL safely
     const params = new URLSearchParams({ limit: '20', min_popularity: '20' });
-    const market = userStats?.country || 'US';  // avoids region 400s
-    params.set('market', market);
+    params.set('market', userStats?.country || 'US'); // avoid region errors
     if (seed_artists.length) params.set('seed_artists', seed_artists.join(','));
     if (seed_tracks.length)  params.set('seed_tracks',  seed_tracks.join(','));
     if (seed_genres.length)  params.set('seed_genres',  seed_genres.join(','));
@@ -301,32 +294,32 @@ const getRecommendations = async (topArtists, token) => {
     const url = `https://api.spotify.com/v1/recommendations?${params.toString()}`;
     console.log('Recs URL:', url);
 
-    const recsResponse = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
 
-    if (recsResponse.status === 401) {
+    if (res.status === 401) {
       window.localStorage.removeItem('spotify_token');
       window.localStorage.removeItem('spotify_token_expiry');
       setIsConnected(false);
       alert('Session expired. Please reconnect to Spotify.');
       return;
     }
-    if (recsResponse.status === 429) {
-      const wait = Number(recsResponse.headers.get('Retry-After') || 1);
+    if (res.status === 429) {
+      const wait = Number(res.headers.get('Retry-After') || 1);
       await new Promise(r => setTimeout(r, wait * 1000));
       return getRecommendations(topArtists, token);
     }
-    if (!recsResponse.ok) {
-      console.error('Recs failed:', recsResponse.status, await recsResponse.text());
-      alert(`Failed to load recommendations (${recsResponse.status}). Try reconnecting.`);
+    if (!res.ok) {
+      console.error('Recs failed:', res.status, await res.text());
+      alert(`Failed to load recommendations (${res.status}). Try reconnecting.`);
       return;
     }
 
-    const recs = await recsResponse.json();
-    if (recs?.tracks?.length) {
-      setRecommendations(recs.tracks);
-      setCurrentTrack(recs.tracks[0]);
+    const data = await res.json();
+    if (data?.tracks?.length) {
+      setRecommendations(data.tracks);
+      setCurrentTrack(data.tracks[0]);
     } else {
-      alert('No recommendations right now. Try tweaking the slider.');
+      alert('No recommendations right now. Try adjusting the slider.');
     }
   } catch (err) {
     console.error('Error getting recs:', err);
