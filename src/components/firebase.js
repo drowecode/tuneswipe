@@ -1,24 +1,28 @@
-// Firebase configuration and initialization
-import { initializeApp } from 'firebase/app'
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'
-import { getFirestore, doc, setDoc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore'
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from "firebase/firestore";
 
-// Your Firebase config - GET THIS FROM FIREBASE CONSOLE
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
-}
+  apiKey: "AIzaSyDGntgef6ZTEWpoXOVSSbx3evfWzhGoaGo",
+  authDomain: "tuneswi.firebaseapp.com",
+  projectId: "tuneswi",
+  storageBucket: "tuneswi.firebasestorage.app",
+  messagingSenderId: "1064407703187",
+  appId: "1:1064407703187:web:a5e052bebe634d5bc5f766",
+  measurementId: "G-0JPL80ZPNB"
+};
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig)
-const auth = getAuth(app)
-const db = getFirestore(app)
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 
-// Create or get user profile
 export const createUserProfile = async (spotifyData) => {
   try {
     // Sign in anonymously or use existing session
@@ -101,4 +105,7 @@ export const onAuthChange = (callback) => {
   return onAuthStateChanged(auth, callback)
 }
 
-export { auth, db }
+const auth = getAuth(app);
+export const db = getFirestore(app);
+
+export { auth }

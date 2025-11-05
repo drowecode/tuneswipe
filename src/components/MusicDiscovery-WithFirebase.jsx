@@ -186,10 +186,10 @@ const MusicDiscovery = () => {
         spotifyId: profile.id,
         topArtists: topArtists.items || [],
         topTracks: topTracks.items || [],
-        topGenres: topGenres
-      }
-
-      setUserStats(userData)
+        topGenres: topGenres,
+        country: profile?.country || 'US'
+      };
+      setUserStats(userData);
 
       // Create/update Firebase user profile
       try {
@@ -214,8 +214,8 @@ const MusicDiscovery = () => {
       setIsConnected(true)
       
       // Get initial recommendations once stats are ready
-      await getRecommendations(topArtists.items || [], token);      
-      
+      await getRecommendations(topArtists.items || [], token);
+
       setIsLoading(false)
     } catch (error) {
       console.error('Error fetching Spotify data:', error)
@@ -224,8 +224,7 @@ const MusicDiscovery = () => {
     }
   }
 
-// Cache genre seeds so we only fetch once
-// cache genre seeds so we only fetch once
+// --- helpers ---
 let _genreSeeds = null;
 const getGenreSeeds = async (token) => {
   if (_genreSeeds) return _genreSeeds;
@@ -236,40 +235,55 @@ const getGenreSeeds = async (token) => {
   return _genreSeeds;
 };
 
+const isSpotifyId = v => typeof v === 'string' && /^[0-9A-Za-z]{22}$/.test(v);
+
+// --- drop-in replacement ---
 const getRecommendations = async (topArtists, token) => {
-  if (!Array.isArray(topArtists) || !topArtists.length || !token) return;
+  console.log('getRecommendations called with:', {
+    topArtistsCount: Array.isArray(topArtists) ? topArtists.length : null,
+    hasToken: !!token, discoveryMode
+  });
+  if (!Array.isArray(topArtists) || topArtists.length === 0 || !token) return;
 
   try {
-    // familiar/exploratory split
+    // split familiar/exploratory
     const familiarCount = Math.max(1, Math.floor((1 - discoveryMode / 100) * 3));
     const exploratoryCount = Math.max(0, 3 - familiarCount);
 
-    // familiar seeds from top artists
-    const familiarSeeds = topArtists.slice(0, familiarCount).map(a => a?.id).filter(Boolean);
+    // familiar seeds
+    const familiarSeeds = topArtists.slice(0, familiarCount).map(a => a?.id).filter(isSpotifyId);
 
-    // exploratory seeds via related-artists (best effort)
+    // exploratory via related-artists (best-effort + guarded)
     let exploratorySeeds = [];
     if (exploratoryCount > 0 && topArtists.length) {
       try {
         const pick = topArtists[Math.floor(Math.random() * Math.min(5, topArtists.length))];
-        const rel = await fetch(`https://api.spotify.com/v1/artists/${pick.id}/related-artists`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (rel.ok) {
-          const j = await rel.json();
-          exploratorySeeds = (j.artists || []).slice(0, exploratoryCount).map(a => a?.id).filter(Boolean);
+        if (isSpotifyId(pick?.id)) {
+          const rel = await fetch(`https://api.spotify.com/v1/artists/${pick.id}/related-artists`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (rel.ok) {
+            const j = await rel.json();
+            exploratorySeeds = (j.artists || [])
+              .slice(0, exploratoryCount)
+              .map(a => a?.id)
+              .filter(isSpotifyId);
+          } else {
+            console.warn('related-artists failed:', rel.status);
+          }
         }
-      } catch { /* ignore */ }
+      } catch (e) { console.warn('related-artists error:', e); }
     }
 
-    // add a couple of reliable track seeds
-    const trackSeeds = (userStats?.topTracks || []).slice(0, 2).map(t => t?.id).filter(Boolean);
+    // reliable track seeds
+    const trackSeeds = (userStats?.topTracks || [])
+      .slice(0, 2).map(t => t?.id).filter(isSpotifyId);
 
-    // dedupe + clamp to Spotify's 5-seed total
+    // dedupe + clamp
     const seed_artists = [...new Set([...familiarSeeds, ...exploratorySeeds])].slice(0, 3);
     const seed_tracks  = trackSeeds.slice(0, 2);
 
-    // fallback: allowed genre seeds only
+    // fallback to allowed genre seeds
     let seed_genres = [];
     if (seed_artists.length + seed_tracks.length === 0) {
       const allowed = new Set(await getGenreSeeds(token));
@@ -284,9 +298,9 @@ const getRecommendations = async (topArtists, token) => {
       return;
     }
 
-    // build URL safely
+    // safe URL assembly (prevents malformed queries → 404)
     const params = new URLSearchParams({ limit: '20', min_popularity: '20' });
-    params.set('market', userStats?.country || 'US'); // avoid region errors
+    params.set('market', userStats?.country || 'US');
     if (seed_artists.length) params.set('seed_artists', seed_artists.join(','));
     if (seed_tracks.length)  params.set('seed_tracks',  seed_tracks.join(','));
     if (seed_genres.length)  params.set('seed_genres',  seed_genres.join(','));
@@ -297,8 +311,8 @@ const getRecommendations = async (topArtists, token) => {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
 
     if (res.status === 401) {
-      window.localStorage.removeItem('spotify_token');
-      window.localStorage.removeItem('spotify_token_expiry');
+      localStorage.removeItem('spotify_token');
+      localStorage.removeItem('spotify_token_expiry');
       setIsConnected(false);
       alert('Session expired. Please reconnect to Spotify.');
       return;
@@ -322,13 +336,12 @@ const getRecommendations = async (topArtists, token) => {
       alert('No recommendations right now. Try adjusting the slider.');
     }
   } catch (err) {
-    console.error('Error getting recs:', err);
+    console.error('Error getting recommendations:', err);
     alert('Error loading recommendations. Check console and try again.');
   } finally {
     setIsLoading(false);
   }
 };
-
   // Add track to Spotify liked songs
   const addToSpotifyLiked = async (trackUri) => {
     if (!spotifyToken) return
@@ -413,12 +426,11 @@ const getRecommendations = async (topArtists, token) => {
     }
   }
 
-  // Update recommendations when discovery mode changes
   useEffect(() => {
-    if (isConnected && spotifyToken && userStats?.topArtists?.length) {
-      setIsLoading(true);
-      getRecommendations(userStats.topArtists, spotifyToken);
-    }
+  if (isConnected && spotifyToken && userStats?.topArtists?.length) {
+    setIsLoading(true);
+    getRecommendations(userStats.topArtists, spotifyToken);
+  }
   }, [discoveryMode]);
   
 
