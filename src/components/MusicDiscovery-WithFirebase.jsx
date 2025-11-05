@@ -224,124 +224,178 @@ const MusicDiscovery = () => {
     }
   }
 
-// --- helpers ---
-let _genreSeeds = null;
-const getGenreSeeds = async (token) => {
-  if (_genreSeeds) return _genreSeeds;
-  const r = await fetch('https://api.spotify.com/v1/recommendations/available-genre-seeds', {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  _genreSeeds = r.ok ? (await r.json()).genres : [];
-  return _genreSeeds;
-};
+  // --- helpers ---
+  let _genreSeeds = null;
+  const getGenreSeeds = async (token) => {
+    if (_genreSeeds) return _genreSeeds;
+    const r = await fetch('https://api.spotify.com/v1/recommendations/available-genre-seeds', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    _genreSeeds = r.ok ? (await r.json()).genres : [];
+    return _genreSeeds;
+  };
 
-const isSpotifyId = v => typeof v === 'string' && /^[0-9A-Za-z]{22}$/.test(v);
+  const isSpotifyId = v => typeof v === 'string' && /^[0-9A-Za-z]{22}$/.test(v);
 
-// --- drop-in replacement ---
-const getRecommendations = async (topArtists, token) => {
-  console.log('getRecommendations called with:', {
-    topArtistsCount: Array.isArray(topArtists) ? topArtists.length : null,
-    hasToken: !!token, discoveryMode
-  });
-  if (!Array.isArray(topArtists) || topArtists.length === 0 || !token) return;
+  // --- drop-in replacement ---
+  const getRecommendations = async (topArtists, token) => {
+    console.log('getRecommendations called with:', {
+      topArtistsCount: Array.isArray(topArtists) ? topArtists.length : null,
+      hasToken: !!token, discoveryMode
+    });
+    if (!Array.isArray(topArtists) || topArtists.length === 0 || !token) return;
 
-  try {
-    // split familiar/exploratory
-    const familiarCount = Math.max(1, Math.floor((1 - discoveryMode / 100) * 3));
-    const exploratoryCount = Math.max(0, 3 - familiarCount);
+    try {
+      // split familiar/exploratory
+      const familiarCount = Math.max(1, Math.floor((1 - discoveryMode / 100) * 3));
+      const exploratoryCount = Math.max(0, 3 - familiarCount);
 
-    // familiar seeds
-    const familiarSeeds = topArtists.slice(0, familiarCount).map(a => a?.id).filter(isSpotifyId);
+      // familiar seeds
+      const familiarSeeds = topArtists.slice(0, familiarCount).map(a => a?.id).filter(isSpotifyId);
 
-    // exploratory via related-artists (best-effort + guarded)
-    let exploratorySeeds = [];
-    if (exploratoryCount > 0 && topArtists.length) {
-      try {
-        const pick = topArtists[Math.floor(Math.random() * Math.min(5, topArtists.length))];
-        if (isSpotifyId(pick?.id)) {
-          const rel = await fetch(`https://api.spotify.com/v1/artists/${pick.id}/related-artists`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (rel.ok) {
-            const j = await rel.json();
-            exploratorySeeds = (j.artists || [])
-              .slice(0, exploratoryCount)
-              .map(a => a?.id)
-              .filter(isSpotifyId);
-          } else {
-            console.warn('related-artists failed:', rel.status);
+      // exploratory via related-artists (best-effort + guarded)
+      let exploratorySeeds = [];
+      if (exploratoryCount > 0 && topArtists.length) {
+        try {
+          const pick = topArtists[Math.floor(Math.random() * Math.min(5, topArtists.length))];
+          if (isSpotifyId(pick?.id)) {
+            const rel = await fetch(`https://api.spotify.com/v1/artists/${pick.id}/related-artists`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (rel.ok) {
+              const j = await rel.json();
+              exploratorySeeds = (j.artists || [])
+                .slice(0, exploratoryCount)
+                .map(a => a?.id)
+                .filter(isSpotifyId);
+            } else if (rel.status === 401) {
+              // Token expired
+              localStorage.removeItem('spotify_token');
+              localStorage.removeItem('spotify_token_expiry');
+              setIsConnected(false);
+              alert('Session expired. Please reconnect to Spotify.');
+              return;
+            } else {
+              console.warn('related-artists failed:', rel.status, await rel.text().catch(() => ''));
+            }
           }
+        } catch (e) { 
+            console.warn('related-artists error:', e);
+            // Continue without exploratory seeds if related-artists fails
+          }
+      }
+
+      // reliable track seeds
+      const trackSeeds = (userStats?.topTracks || [])
+        .slice(0, 2).map(t => t?.id).filter(isSpotifyId);
+
+      // dedupe + clamp
+      const seed_artists = [...new Set([...familiarSeeds, ...exploratorySeeds])].slice(0, 5);
+      const seed_tracks  = trackSeeds.slice(0, 5);
+
+      // Ensure we have at least one valid seed - use genre seeds as fallback if needed
+      let seed_genres = [];
+      const totalSeedsSoFar = seed_artists.length + seed_tracks.length;
+      
+      if (totalSeedsSoFar === 0 || totalSeedsSoFar < 1) {
+        // Get genre seeds as fallback
+        try {
+          const allowed = new Set(await getGenreSeeds(token));
+          seed_genres = (userStats?.topGenres || [])
+            .map(g => g?.name?.toLowerCase().replace(/\s+/g, '-'))
+            .filter(g => g && allowed.has(g))
+            .slice(0, 5);
+        } catch (e) {
+          console.warn('Failed to get genre seeds:', e);
         }
-      } catch (e) { console.warn('related-artists error:', e); }
+      }
+
+      // Final validation - we must have at least one seed
+      if (!seed_artists.length && !seed_tracks.length && !seed_genres.length) {
+        console.error('No valid seeds available after all fallbacks');
+        alert('Not enough listening history to generate recommendations. Please listen to more music on Spotify first.');
+        setIsLoading(false);
+        return;
+      }
+
+      // safe URL assembly (prevents malformed queries → 404)
+      // Spotify requires at least 1 seed and max 5 total seeds
+      // Priority: artists > tracks > genres
+      let maxArtistSeeds = Math.min(seed_artists.length, 5);
+      let maxTrackSeeds = Math.min(seed_tracks.length, Math.max(0, 5 - maxArtistSeeds));
+      let maxGenreSeeds = Math.min(seed_genres.length, Math.max(0, 5 - maxArtistSeeds - maxTrackSeeds));
+      
+      // Final validation - ensure we have at least 1 seed total
+      if (maxArtistSeeds + maxTrackSeeds + maxGenreSeeds === 0) {
+        console.error('No valid seeds after limiting');
+        alert('Not enough listening history to generate recommendations. Please listen to more music on Spotify first.');
+        setIsLoading(false);
+        return;
+      }
+
+      const params = new URLSearchParams();
+      params.set('limit', '20');
+      params.set('market', userStats?.country || 'US');
+      
+      if (maxArtistSeeds > 0) {
+        params.set('seed_artists', seed_artists.slice(0, maxArtistSeeds).join(','));
+      }
+      if (maxTrackSeeds > 0) {
+        params.set('seed_tracks', seed_tracks.slice(0, maxTrackSeeds).join(','));
+      }
+      if (maxGenreSeeds > 0) {
+        params.set('seed_genres', seed_genres.slice(0, maxGenreSeeds).join(','));
+      }
+
+      const url = `https://api.spotify.com/v1/recommendations?${params.toString()}`;
+      console.log('Recs URL:', url);
+      console.log('Seeds:', { artists: seed_artists.slice(0, maxArtistSeeds), tracks: seed_tracks.slice(0, maxTrackSeeds), genres: seed_genres.slice(0, maxGenreSeeds) });
+
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+
+      if (res.status === 401) {
+        localStorage.removeItem('spotify_token');
+        localStorage.removeItem('spotify_token_expiry');
+        setIsConnected(false);
+        alert('Session expired. Please reconnect to Spotify.');
+        return;
+      }
+      if (res.status === 429) {
+        const wait = Number(res.headers.get('Retry-After') || 1);
+        await new Promise(r => setTimeout(r, wait * 1000));
+        return getRecommendations(topArtists, token);
+      }
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        console.error('Recs failed:', res.status, errorText);
+        
+        if (res.status === 400) {
+          // Bad request - likely invalid seed parameters
+          alert('Invalid recommendation parameters. Please try adjusting the discovery mode or reconnect to Spotify.');
+        } else if (res.status === 404) {
+          // Not found - could be invalid endpoint or token issue
+          alert('Recommendations endpoint not found. Please try reconnecting to Spotify.');
+        } else {
+          alert(`Failed to load recommendations (${res.status}). Try reconnecting.`);
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      const data = await res.json();
+      if (data?.tracks?.length) {
+        setRecommendations(data.tracks);
+        setCurrentTrack(data.tracks[0]);
+      } else {
+        alert('No recommendations right now. Try adjusting the slider.');
+      }
+    } catch (err) {
+      console.error('Error getting recommendations:', err);
+      alert('Error loading recommendations. Check console and try again.');
+    } finally {
+      setIsLoading(false);
     }
-
-    // reliable track seeds
-    const trackSeeds = (userStats?.topTracks || [])
-      .slice(0, 2).map(t => t?.id).filter(isSpotifyId);
-
-    // dedupe + clamp
-    const seed_artists = [...new Set([...familiarSeeds, ...exploratorySeeds])].slice(0, 3);
-    const seed_tracks  = trackSeeds.slice(0, 2);
-
-    // fallback to allowed genre seeds
-    let seed_genres = [];
-    if (seed_artists.length + seed_tracks.length === 0) {
-      const allowed = new Set(await getGenreSeeds(token));
-      seed_genres = (userStats?.topGenres || [])
-        .map(g => g?.name?.toLowerCase().replace(/\s+/g, '-'))
-        .filter(g => g && allowed.has(g))
-        .slice(0, 5);
-    }
-
-    if (!seed_artists.length && !seed_tracks.length && !seed_genres.length) {
-      alert('Not enough listening history to generate recommendations yet.');
-      return;
-    }
-
-    // safe URL assembly (prevents malformed queries → 404)
-    const params = new URLSearchParams({ limit: '20', min_popularity: '20' });
-    params.set('market', userStats?.country || 'US');
-    if (seed_artists.length) params.set('seed_artists', seed_artists.join(','));
-    if (seed_tracks.length)  params.set('seed_tracks',  seed_tracks.join(','));
-    if (seed_genres.length)  params.set('seed_genres',  seed_genres.join(','));
-
-    const url = `https://api.spotify.com/v1/recommendations?${params.toString()}`;
-    console.log('Recs URL:', url);
-
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-
-    if (res.status === 401) {
-      localStorage.removeItem('spotify_token');
-      localStorage.removeItem('spotify_token_expiry');
-      setIsConnected(false);
-      alert('Session expired. Please reconnect to Spotify.');
-      return;
-    }
-    if (res.status === 429) {
-      const wait = Number(res.headers.get('Retry-After') || 1);
-      await new Promise(r => setTimeout(r, wait * 1000));
-      return getRecommendations(topArtists, token);
-    }
-    if (!res.ok) {
-      console.error('Recs failed:', res.status, await res.text());
-      alert(`Failed to load recommendations (${res.status}). Try reconnecting.`);
-      return;
-    }
-
-    const data = await res.json();
-    if (data?.tracks?.length) {
-      setRecommendations(data.tracks);
-      setCurrentTrack(data.tracks[0]);
-    } else {
-      alert('No recommendations right now. Try adjusting the slider.');
-    }
-  } catch (err) {
-    console.error('Error getting recommendations:', err);
-    alert('Error loading recommendations. Check console and try again.');
-  } finally {
-    setIsLoading(false);
-  }
-};
+  };
   // Add track to Spotify liked songs
   const addToSpotifyLiked = async (trackUri) => {
     if (!spotifyToken) return
