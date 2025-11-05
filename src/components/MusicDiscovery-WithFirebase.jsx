@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Heart, ThumbsUp, Meh, ThumbsDown, TrendingUp, Music, User, BarChart3, Sliders, Plus } from 'lucide-react'
-import './MusicDiscovery.css'
-import { createUserProfile, savePreference, getUserPreferences, onAuthChange } from './firebase'
+import './MusicDiscovery-Final.css'
+import { createUserProfile, savePreference, getUserPreferences, onAuthChange } from '../firebase'
 
 const MusicDiscovery = () => {
   const [isConnected, setIsConnected] = useState(false)
