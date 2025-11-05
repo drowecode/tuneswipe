@@ -224,113 +224,117 @@ const MusicDiscovery = () => {
     }
   }
 
-  // Get recommendations from Spotify
-  // Get recommendations from Spotify (robust)
-const getRecommendations = async (topArtists, token) => {
-  console.log('getRecommendations called with:', {
-    topArtistsCount: topArtists?.length, hasToken: !!token, discoveryMode
-  })
+// Cache genre seeds so we only fetch once
+let _genreSeeds = null;
+const getGenreSeeds = async (token) => {
+  if (_genreSeeds) return _genreSeeds;
+  const r = await fetch('https://api.spotify.com/v1/recommendations/available-genre-seeds', {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  _genreSeeds = r.ok ? (await r.json()).genres : [];
+  return _genreSeeds;
+};
 
-  if (!Array.isArray(topArtists) || topArtists.length === 0) {
-    alert('Unable to load recommendations. No top artists found.')
-    return
-  }
-  if (!token) return
+const getRecommendations = async (topArtists, token) => {
+  if (!Array.isArray(topArtists) || !topArtists.length || !token) return;
 
   try {
-    // --- Build seed set ------------------------------------------------------
-    const familiarCount = Math.max(1, Math.floor((1 - discoveryMode / 100) * 3))
-    const exploratoryCount = 3 - familiarCount
+    // 1) Familiar vs exploratory split
+    const familiarCount = Math.max(1, Math.floor((1 - discoveryMode / 100) * 3));
+    const exploratoryCount = Math.max(0, 3 - familiarCount);
 
-    const familiarSeeds = topArtists.slice(0, familiarCount).map(a => a.id)
+    // 2) Familiar artist seeds (clean + dedupe)
+    const familiarSeeds = topArtists
+      .slice(0, familiarCount)
+      .map(a => a?.id)
+      .filter(Boolean);
 
-    let exploratorySeeds = []
-    if (exploratoryCount > 0) {
+    // 3) Exploratory via related-artists (best-effort)
+    let exploratorySeeds = [];
+    if (exploratoryCount > 0 && topArtists.length) {
       try {
-        const pick = topArtists[Math.floor(Math.random() * Math.min(5, topArtists.length))]
-        const relatedRes = await fetch(`https://api.spotify.com/v1/artists/${pick.id}/related-artists`, {
+        const pick = topArtists[Math.floor(Math.random() * Math.min(5, topArtists.length))];
+        const rel = await fetch(`https://api.spotify.com/v1/artists/${pick.id}/related-artists`, {
           headers: { Authorization: `Bearer ${token}` }
-        })
-        if (relatedRes.ok) {
-          const related = await relatedRes.json()
-          exploratorySeeds = (related.artists || []).slice(0, exploratoryCount).map(a => a.id)
-        } else {
-          console.warn('related-artists failed:', relatedRes.status)
+        });
+        if (rel.ok) {
+          const j = await rel.json();
+          exploratorySeeds = (j.artists || []).slice(0, exploratoryCount).map(a => a?.id).filter(Boolean);
         }
-      } catch (e) {
-        console.warn('related-artists error:', e)
-      }
+      } catch { /* ignore */ }
     }
 
-    // Dedup + clamp to Spotify’s 5 seed limit
-    let seedArtists = [...new Set([...familiarSeeds, ...exploratorySeeds])].slice(0, 5)
+    // 4) Add a couple top TRACK seeds (these are always valid IDs)
+    const trackSeeds = (userStats?.topTracks || [])
+      .slice(0, 2)
+      .map(t => t?.id)
+      .filter(Boolean);
 
-    // --- Fallbacks if artist seeds are thin ----------------------------------
-    const params = new URLSearchParams({
-      limit: '20',
-      min_popularity: '20',
-      market: 'from_token'            // <<< prevents region/market issues
-    })
+    // 5) Build up to 5 total seeds, no empties, no duplicates
+    const seed_artists = [...new Set([...familiarSeeds, ...exploratorySeeds])].slice(0, 3);
+    const seed_tracks  = trackSeeds.slice(0, 2);
+    const haveSeeds = seed_artists.length + seed_tracks.length > 0;
 
-    if (seedArtists.length) {
-      params.set('seed_artists', seedArtists.join(','))
-    } else if (userStats?.topGenres?.length) {
-      // fallback to genres
-      params.set('seed_genres', userStats.topGenres.slice(0, 5).map(g => g.name).join(','))
-    } else if (userStats?.topTracks?.length) {
-      // fallback to tracks
-      params.set('seed_tracks', userStats.topTracks.slice(0, 5).map(t => t.id).join(','))
-    } else {
-      alert('Not enough listening history to generate recommendations yet.')
-      return
+    // 6) If still thin, fall back to allowed genre seeds only
+    let seed_genres = [];
+    if (!haveSeeds) {
+      const allowed = new Set(await getGenreSeeds(token));
+      seed_genres = (userStats?.topGenres || [])
+        .map(g => g?.name?.toLowerCase().replace(/\s+/g, '-'))
+        .filter(g => g && allowed.has(g))
+        .slice(0, 5);
     }
 
-    // --- Call recommendations -------------------------------------------------
-    const recsResponse = await fetch(
-      `https://api.spotify.com/v1/recommendations?${params.toString()}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
+    if (!seed_artists.length && !seed_tracks.length && !seed_genres.length) {
+      alert('Not enough listening history to generate recommendations yet.');
+      return;
+    }
 
-    // Token expired
+    // 7) Build query safely
+    const params = new URLSearchParams({ limit: '20', min_popularity: '20' });
+    const market = userStats?.country || 'US';  // avoids region 400s
+    params.set('market', market);
+    if (seed_artists.length) params.set('seed_artists', seed_artists.join(','));
+    if (seed_tracks.length)  params.set('seed_tracks',  seed_tracks.join(','));
+    if (seed_genres.length)  params.set('seed_genres',  seed_genres.join(','));
+
+    const url = `https://api.spotify.com/v1/recommendations?${params.toString()}`;
+    console.log('Recs URL:', url);
+
+    const recsResponse = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+
     if (recsResponse.status === 401) {
-      console.warn('401 on recommendations — clearing token')
-      window.localStorage.removeItem('spotify_token')
-      window.localStorage.removeItem('spotify_token_expiry')
-      alert('Session expired. Please reconnect to Spotify.')
-      setIsConnected(false)
-      return
+      window.localStorage.removeItem('spotify_token');
+      window.localStorage.removeItem('spotify_token_expiry');
+      setIsConnected(false);
+      alert('Session expired. Please reconnect to Spotify.');
+      return;
     }
-
-    // Rate-limited — polite retry once
     if (recsResponse.status === 429) {
-      const retryAfter = Number(recsResponse.headers.get('Retry-After') || 1)
-      console.warn('429 rate limit; retrying after', retryAfter, 's')
-      await new Promise(r => setTimeout(r, retryAfter * 1000))
-      return getRecommendations(topArtists, token)
+      const wait = Number(recsResponse.headers.get('Retry-After') || 1);
+      await new Promise(r => setTimeout(r, wait * 1000));
+      return getRecommendations(topArtists, token);
     }
-
     if (!recsResponse.ok) {
-      const body = await recsResponse.text()
-      console.error('Recommendations failed:', recsResponse.status, body)
-      alert(`Failed to load recommendations (${recsResponse.status}). Try reconnecting.`)
-      return
+      console.error('Recs failed:', recsResponse.status, await recsResponse.text());
+      alert(`Failed to load recommendations (${recsResponse.status}). Try reconnecting.`);
+      return;
     }
 
-    const recsData = await recsResponse.json()
-    if (recsData.tracks?.length) {
-      setRecommendations(recsData.tracks)
-      setCurrentTrack(recsData.tracks[0])
-      console.log('Loaded', recsData.tracks.length, 'recs')
+    const recs = await recsResponse.json();
+    if (recs?.tracks?.length) {
+      setRecommendations(recs.tracks);
+      setCurrentTrack(recs.tracks[0]);
     } else {
-      alert('No recommendations available right now. Try tweaking discovery mode.')
+      alert('No recommendations right now. Try tweaking the slider.');
     }
-  } catch (error) {
-    console.error('Error getting recommendations:', error)
-    alert('Error loading recommendations. Check console and try again.')
+  } catch (err) {
+    console.error('Error getting recs:', err);
+    alert('Error loading recommendations. Check console and try again.');
   } finally {
-    setIsLoading(false)
+    setIsLoading(false);
   }
-}
+};
 
   // Add track to Spotify liked songs
   const addToSpotifyLiked = async (trackUri) => {
@@ -418,10 +422,12 @@ const getRecommendations = async (topArtists, token) => {
 
   // Update recommendations when discovery mode changes
   useEffect(() => {
-    if (isConnected && userStats?.topArtists && spotifyToken) {
-      getRecommendations(userStats.topArtists, spotifyToken)
+    if (isConnected && spotifyToken && userStats?.topArtists?.length) {
+      setIsLoading(true);
+      getRecommendations(userStats.topArtists, spotifyToken);
     }
-  }, [discoveryMode])
+  }, [discoveryMode]);
+  
 
   // Login view
   if (!isConnected) {
