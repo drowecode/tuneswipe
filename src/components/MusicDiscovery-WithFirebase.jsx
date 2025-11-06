@@ -271,6 +271,26 @@ const MusicDiscovery = () => {
     });
     if (!Array.isArray(topArtists) || topArtists.length === 0 || !token) return;
 
+    // First, verify the token works with a simple API call
+    try {
+      const testResponse = await fetch('https://api.spotify.com/v1/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (testResponse.status === 401) {
+        console.error('Token is invalid or expired');
+        localStorage.removeItem('spotify_token');
+        localStorage.removeItem('spotify_token_expiry');
+        setIsConnected(false);
+        alert('Your Spotify session has expired. Please reconnect.');
+        return;
+      }
+      if (!testResponse.ok) {
+        console.error('Token validation failed:', testResponse.status);
+      }
+    } catch (e) {
+      console.error('Failed to validate token:', e);
+    }
+
     try {
       // split familiar/exploratory
       const familiarCount = Math.max(1, Math.floor((1 - discoveryMode / 100) * 3));
@@ -324,11 +344,21 @@ const MusicDiscovery = () => {
         .slice(0, 5)
         .map(t => {
           const id = t?.id || t?.uri?.split(':')?.pop();
+          if (!id) {
+            console.warn('Track missing ID:', t);
+          }
           return id;
         })
-        .filter(isSpotifyId);
+        .filter(id => {
+          const isValid = isSpotifyId(id);
+          if (!isValid && id) {
+            console.warn('Invalid track ID:', id, 'from track:', tracks.find(t => (t?.id || t?.uri?.split(':')?.pop()) === id));
+          }
+          return isValid;
+        });
       
       console.log('Track seeds extracted:', trackSeeds.length, 'from', tracks.length, 'tracks');
+      console.log('Track seed IDs:', trackSeeds);
 
       // dedupe + clamp artist seeds
       const seed_artists = [...new Set([...familiarSeeds, ...exploratorySeeds])].slice(0, 5);
@@ -378,6 +408,7 @@ const MusicDiscovery = () => {
         maxTrackSeeds = Math.min(seed_tracks.length, 5);
         maxArtistSeeds = 0; // Don't mix tracks and artists - can cause 404s
         maxGenreSeeds = 0;
+        console.log('Using track-only seeds:', maxTrackSeeds, 'tracks');
       } else if (hasArtists) {
         // If we have artists but no tracks, use multiple artists (at least 2-3 for better results)
         // Spotify works better with multiple artist seeds
@@ -428,18 +459,28 @@ const MusicDiscovery = () => {
       params.set('limit', '20');
       params.set('market', userStats?.country || 'US');
       
-      if (maxArtistSeeds > 0) {
-        params.set('seed_artists', seed_artists.slice(0, maxArtistSeeds).join(','));
-      }
+      // Spotify requires at least 1 seed - validate we have valid seeds
       if (maxTrackSeeds > 0) {
-        params.set('seed_tracks', seed_tracks.slice(0, maxTrackSeeds).join(','));
-      }
-      if (maxGenreSeeds > 0) {
-        params.set('seed_genres', seed_genres.slice(0, maxGenreSeeds).join(','));
+        const trackIds = seed_tracks.slice(0, maxTrackSeeds);
+        console.log('Using track IDs:', trackIds);
+        params.set('seed_tracks', trackIds.join(','));
+      } else if (maxArtistSeeds > 0) {
+        const artistIds = seed_artists.slice(0, maxArtistSeeds);
+        console.log('Using artist IDs:', artistIds);
+        params.set('seed_artists', artistIds.join(','));
+      } else if (maxGenreSeeds > 0) {
+        const genreNames = seed_genres.slice(0, maxGenreSeeds);
+        console.log('Using genre names:', genreNames);
+        params.set('seed_genres', genreNames.join(','));
+      } else {
+        console.error('No valid seeds to use!');
+        alert('No valid seeds available. Please try reconnecting to Spotify.');
+        setIsLoading(false);
+        return;
       }
 
       const url = `https://api.spotify.com/v1/recommendations?${params.toString()}`;
-      console.log('Recs URL:', url);
+      console.log('Final Recs URL:', url);
       console.log('Seeds:', { 
         artists: seed_artists.slice(0, maxArtistSeeds), 
         tracks: seed_tracks.slice(0, maxTrackSeeds), 
