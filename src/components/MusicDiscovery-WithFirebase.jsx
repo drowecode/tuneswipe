@@ -258,8 +258,16 @@ const MusicDiscovery = () => {
       const familiarCount = Math.max(1, Math.floor((1 - discoveryMode / 100) * 3));
       const exploratoryCount = Math.max(0, 3 - familiarCount);
 
-      // familiar seeds
-      const familiarSeeds = topArtists.slice(0, familiarCount).map(a => a?.id).filter(isSpotifyId);
+      // familiar seeds - ensure we extract valid IDs
+      const familiarSeeds = topArtists
+        .slice(0, familiarCount)
+        .map(a => {
+          const id = a?.id || a?.uri?.split(':')?.pop();
+          return id;
+        })
+        .filter(isSpotifyId);
+      
+      console.log('Familiar seeds extracted:', familiarSeeds.length, 'from', familiarCount, 'artists');
 
       // exploratory via related-artists (best-effort + guarded)
       let exploratorySeeds = [];
@@ -293,30 +301,43 @@ const MusicDiscovery = () => {
           }
       }
 
-      // reliable track seeds
+      // reliable track seeds - prefer tracks as they're more reliable than artists
       const trackSeeds = (userStats?.topTracks || [])
-        .slice(0, 2).map(t => t?.id).filter(isSpotifyId);
+        .slice(0, 5)
+        .map(t => {
+          const id = t?.id || t?.uri?.split(':')?.pop();
+          return id;
+        })
+        .filter(isSpotifyId);
 
-      // dedupe + clamp
+      // dedupe + clamp artist seeds
       const seed_artists = [...new Set([...familiarSeeds, ...exploratorySeeds])].slice(0, 5);
       const seed_tracks  = trackSeeds.slice(0, 5);
 
-      // Ensure we have at least one valid seed - use genre seeds as fallback if needed
+      // Get genre seeds as additional fallback
       let seed_genres = [];
-      const totalSeedsSoFar = seed_artists.length + seed_tracks.length;
-      
-      if (totalSeedsSoFar === 0 || totalSeedsSoFar < 1) {
-        // Get genre seeds as fallback
-        try {
-          const allowed = new Set(await getGenreSeeds(token));
-          seed_genres = (userStats?.topGenres || [])
-            .map(g => g?.name?.toLowerCase().replace(/\s+/g, '-'))
-            .filter(g => g && allowed.has(g))
-            .slice(0, 5);
-        } catch (e) {
-          console.warn('Failed to get genre seeds:', e);
-        }
+      try {
+        const allowed = new Set(await getGenreSeeds(token));
+        seed_genres = (userStats?.topGenres || [])
+          .map(g => g?.name?.toLowerCase().replace(/\s+/g, '-'))
+          .filter(g => g && allowed.has(g))
+          .slice(0, 5);
+      } catch (e) {
+        console.warn('Failed to get genre seeds:', e);
       }
+
+      // Strategy: Prioritize tracks > artists > genres
+      // If we have tracks, use them primarily (they're most reliable)
+      // If no tracks, use artists + genres combination
+      const hasTracks = seed_tracks.length > 0;
+      const hasArtists = seed_artists.length > 0;
+      
+      console.log('Seed availability:', { 
+        tracks: seed_tracks.length, 
+        artists: seed_artists.length, 
+        genres: seed_genres.length,
+        willUseTracks: hasTracks
+      });
 
       // Final validation - we must have at least one seed
       if (!seed_artists.length && !seed_tracks.length && !seed_genres.length) {
@@ -328,10 +349,25 @@ const MusicDiscovery = () => {
 
       // safe URL assembly (prevents malformed queries → 404)
       // Spotify requires at least 1 seed and max 5 total seeds
-      // Priority: artists > tracks > genres
-      let maxArtistSeeds = Math.min(seed_artists.length, 5);
-      let maxTrackSeeds = Math.min(seed_tracks.length, Math.max(0, 5 - maxArtistSeeds));
-      let maxGenreSeeds = Math.min(seed_genres.length, Math.max(0, 5 - maxArtistSeeds - maxTrackSeeds));
+      // Strategy: Prefer tracks (most reliable), then artists, then genres
+      let maxTrackSeeds, maxArtistSeeds, maxGenreSeeds;
+      
+      if (hasTracks) {
+        // If we have tracks, use them as primary seeds (2-3 tracks work best)
+        maxTrackSeeds = Math.min(seed_tracks.length, 3);
+        maxArtistSeeds = Math.min(seed_artists.length, Math.max(0, 5 - maxTrackSeeds));
+        maxGenreSeeds = Math.min(seed_genres.length, Math.max(0, 5 - maxTrackSeeds - maxArtistSeeds));
+      } else if (hasArtists) {
+        // If we have artists but no tracks, use artists + genres
+        maxArtistSeeds = Math.min(seed_artists.length, 3);
+        maxGenreSeeds = Math.min(seed_genres.length, Math.max(0, 5 - maxArtistSeeds));
+        maxTrackSeeds = 0;
+      } else {
+        // Fallback to genres only
+        maxGenreSeeds = Math.min(seed_genres.length, 5);
+        maxArtistSeeds = 0;
+        maxTrackSeeds = 0;
+      }
       
       // Final validation - ensure we have at least 1 seed total
       if (maxArtistSeeds + maxTrackSeeds + maxGenreSeeds === 0) {
