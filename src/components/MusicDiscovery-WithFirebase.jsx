@@ -214,7 +214,8 @@ const MusicDiscovery = () => {
       setIsConnected(true)
       
       // Get initial recommendations once stats are ready
-      await getRecommendations(topArtists.items || [], token);
+      // Pass both artists and tracks directly (before userStats is fully set)
+      await getRecommendations(topArtists.items || [], token, topTracks.items || []);
 
       setIsLoading(false)
     } catch (error) {
@@ -246,10 +247,15 @@ const MusicDiscovery = () => {
   };
 
   // --- drop-in replacement ---
-  const getRecommendations = async (topArtists, token) => {
+  const getRecommendations = async (topArtists, token, topTracks = null) => {
+    // Use passed tracks or fall back to userStats
+    const tracks = topTracks || userStats?.topTracks || [];
+    
     console.log('getRecommendations called with:', {
       topArtistsCount: Array.isArray(topArtists) ? topArtists.length : null,
-      hasToken: !!token, discoveryMode
+      topTracksCount: Array.isArray(tracks) ? tracks.length : null,
+      hasToken: !!token, 
+      discoveryMode
     });
     if (!Array.isArray(topArtists) || topArtists.length === 0 || !token) return;
 
@@ -302,13 +308,15 @@ const MusicDiscovery = () => {
       }
 
       // reliable track seeds - prefer tracks as they're more reliable than artists
-      const trackSeeds = (userStats?.topTracks || [])
+      const trackSeeds = (tracks || [])
         .slice(0, 5)
         .map(t => {
           const id = t?.id || t?.uri?.split(':')?.pop();
           return id;
         })
         .filter(isSpotifyId);
+      
+      console.log('Track seeds extracted:', trackSeeds.length, 'from', tracks.length, 'tracks');
 
       // dedupe + clamp artist seeds
       const seed_artists = [...new Set([...familiarSeeds, ...exploratorySeeds])].slice(0, 5);
@@ -358,10 +366,36 @@ const MusicDiscovery = () => {
         maxArtistSeeds = Math.min(seed_artists.length, Math.max(0, 5 - maxTrackSeeds));
         maxGenreSeeds = Math.min(seed_genres.length, Math.max(0, 5 - maxTrackSeeds - maxArtistSeeds));
       } else if (hasArtists) {
-        // If we have artists but no tracks, use artists + genres
-        maxArtistSeeds = Math.min(seed_artists.length, 3);
+        // If we have artists but no tracks, use multiple artists (at least 2-3 for better results)
+        // Spotify works better with multiple artist seeds
+        maxArtistSeeds = Math.min(seed_artists.length, 5); // Use up to 5 artists if we have them
         maxGenreSeeds = Math.min(seed_genres.length, Math.max(0, 5 - maxArtistSeeds));
         maxTrackSeeds = 0;
+        
+        // If we only have 1 artist, try to get more from related artists
+        if (maxArtistSeeds === 1 && seed_artists.length > 0) {
+          console.warn('Only 1 artist seed available - Spotify may reject this. Trying to get more...');
+          // Try to get related artists from the single artist we have
+          try {
+            const relatedResponse = await fetch(`https://api.spotify.com/v1/artists/${seed_artists[0]}/related-artists`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            if (relatedResponse.ok) {
+              const relatedData = await relatedResponse.json();
+              const additionalArtists = (relatedData.artists || [])
+                .slice(0, 4)
+                .map(a => a?.id)
+                .filter(isSpotifyId);
+              if (additionalArtists.length > 0) {
+                seed_artists.push(...additionalArtists);
+                maxArtistSeeds = Math.min(seed_artists.length, 5);
+                console.log('Added related artists, now have', maxArtistSeeds, 'artist seeds');
+              }
+            }
+          } catch (e) {
+            console.warn('Could not get related artists:', e);
+          }
+        }
       } else {
         // Fallback to genres only
         maxGenreSeeds = Math.min(seed_genres.length, 5);
@@ -413,7 +447,7 @@ const MusicDiscovery = () => {
       if (res.status === 429) {
         const wait = Number(res.headers.get('Retry-After') || 1);
         await new Promise(r => setTimeout(r, wait * 1000));
-        return getRecommendations(topArtists, token);
+        return getRecommendations(topArtists, token, tracks);
       }
       if (!res.ok) {
         let errorText = '';
@@ -557,7 +591,7 @@ const MusicDiscovery = () => {
     } else {
       // Get more recommendations when we run out
       if (userStats?.topArtists && spotifyToken) {
-        await getRecommendations(userStats.topArtists, spotifyToken)
+        await getRecommendations(userStats.topArtists, spotifyToken, userStats.topTracks || [])
       }
     }
   }
@@ -565,7 +599,7 @@ const MusicDiscovery = () => {
   useEffect(() => {
   if (isConnected && spotifyToken && userStats?.topArtists?.length) {
     setIsLoading(true);
-    getRecommendations(userStats.topArtists, spotifyToken);
+    getRecommendations(userStats.topArtists, spotifyToken, userStats.topTracks || []);
   }
   }, [discoveryMode]);
   
