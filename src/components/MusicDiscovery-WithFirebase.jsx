@@ -24,7 +24,7 @@ const MusicDiscovery = () => {
 
   // Spotify API config
   const SPOTIFY_CLIENT_ID = '317c65a797af484fb3e2af110acdfd72' // Your client ID
-  const REDIRECT_URI = 'https://www.tuneswipe.xyz'
+  const REDIRECT_URI = window.location.origin // Use current origin to avoid redirect URI mismatch
   const SPOTIFY_AUTH_ENDPOINT = 'https://accounts.spotify.com/authorize'
   const SPOTIFY_TOKEN_ENDPOINT = 'https://accounts.spotify.com/api/token'
   const SPOTIFY_SCOPES = [
@@ -455,23 +455,33 @@ const MusicDiscovery = () => {
         return;
       }
 
+      // Build parameters - Spotify recommendations API requires at least 1 seed
+      // Important: Use comma-separated values, not multiple params
       const params = new URLSearchParams();
       params.set('limit', '20');
-      params.set('market', userStats?.country || 'US');
+      
+      // Market parameter - use from user profile or default to US
+      const market = userStats?.country || 'US';
+      params.set('market', market);
       
       // Spotify requires at least 1 seed - validate we have valid seeds
+      let seedCount = 0;
       if (maxTrackSeeds > 0) {
         const trackIds = seed_tracks.slice(0, maxTrackSeeds);
         console.log('Using track IDs:', trackIds);
+        // Join with comma - Spotify expects comma-separated string
         params.set('seed_tracks', trackIds.join(','));
+        seedCount = trackIds.length;
       } else if (maxArtistSeeds > 0) {
         const artistIds = seed_artists.slice(0, maxArtistSeeds);
         console.log('Using artist IDs:', artistIds);
         params.set('seed_artists', artistIds.join(','));
+        seedCount = artistIds.length;
       } else if (maxGenreSeeds > 0) {
         const genreNames = seed_genres.slice(0, maxGenreSeeds);
         console.log('Using genre names:', genreNames);
         params.set('seed_genres', genreNames.join(','));
+        seedCount = genreNames.length;
       } else {
         console.error('No valid seeds to use!');
         alert('No valid seeds available. Please try reconnecting to Spotify.');
@@ -479,8 +489,24 @@ const MusicDiscovery = () => {
         return;
       }
 
+      // Validate we have at least 1 seed (Spotify requirement)
+      if (seedCount === 0) {
+        console.error('Seed count is 0!');
+        alert('No valid seeds available. Please try reconnecting to Spotify.');
+        setIsLoading(false);
+        return;
+      }
+
       const url = `https://api.spotify.com/v1/recommendations?${params.toString()}`;
       console.log('Final Recs URL:', url);
+      console.log('URL breakdown:', {
+        limit: params.get('limit'),
+        market: params.get('market'),
+        seed_tracks: params.get('seed_tracks'),
+        seed_artists: params.get('seed_artists'),
+        seed_genres: params.get('seed_genres'),
+        seedCount
+      });
       console.log('Seeds:', { 
         artists: seed_artists.slice(0, maxArtistSeeds), 
         tracks: seed_tracks.slice(0, maxTrackSeeds), 
