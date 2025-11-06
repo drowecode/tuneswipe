@@ -542,10 +542,29 @@ const MusicDiscovery = () => {
             trackOnlyParams.set('market', userStats?.country || 'US');
             // Use 2-5 track seeds for best results
             const trackSeedCount = Math.min(seed_tracks.length, 5);
-            trackOnlyParams.set('seed_tracks', seed_tracks.slice(0, trackSeedCount).join(','));
+            const trackIdsToUse = seed_tracks.slice(0, trackSeedCount);
+            console.log('Retry track IDs:', trackIdsToUse);
+            trackOnlyParams.set('seed_tracks', trackIdsToUse.join(','));
             
             const retryUrl = `https://api.spotify.com/v1/recommendations?${trackOnlyParams.toString()}`;
             console.log('Retry URL:', retryUrl);
+            
+            // First verify one of the track IDs is valid
+            if (trackIdsToUse.length > 0) {
+              try {
+                const trackTest = await fetch(`https://api.spotify.com/v1/tracks/${trackIdsToUse[0]}`, {
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+                if (trackTest.ok) {
+                  console.log('Track ID is valid:', trackIdsToUse[0]);
+                } else {
+                  console.error('Track ID validation failed:', trackTest.status, await trackTest.json().catch(() => ({})));
+                }
+              } catch (e) {
+                console.error('Failed to validate track ID:', e);
+              }
+            }
+            
             const retryRes = await fetch(retryUrl, { headers: { Authorization: `Bearer ${token}` } });
             
             if (retryRes.ok) {
@@ -562,6 +581,12 @@ const MusicDiscovery = () => {
             } else {
               const retryError = await retryRes.json().catch(() => ({}));
               console.error('Retry also failed:', retryRes.status, retryError);
+              
+              // If 404 on recommendations with valid track IDs, token might not have right scopes
+              if (retryRes.status === 404) {
+                console.error('404 on recommendations with valid track IDs - token may lack required scopes');
+                alert('Spotify API access issue. Please disconnect and reconnect to Spotify to refresh permissions.');
+              }
             }
           }
           
