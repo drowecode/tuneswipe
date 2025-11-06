@@ -229,11 +229,23 @@ const MusicDiscovery = () => {
   let _genreSeeds = null;
   const getGenreSeeds = async (token) => {
     if (_genreSeeds) return _genreSeeds;
-    const r = await fetch('https://api.spotify.com/v1/recommendations/available-genre-seeds', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    _genreSeeds = r.ok ? (await r.json()).genres : [];
-    return _genreSeeds;
+    try {
+      const r = await fetch('https://api.spotify.com/v1/recommendations/available-genre-seeds', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (r.ok) {
+        const data = await r.json();
+        _genreSeeds = data.genres || [];
+        return _genreSeeds;
+      } else {
+        console.warn('Genre seeds endpoint failed:', r.status, await r.text().catch(() => ''));
+        // Return empty array if it fails - not critical
+        return [];
+      }
+    } catch (e) {
+      console.warn('Genre seeds fetch error:', e);
+      return [];
+    }
   };
 
   const isSpotifyId = v => {
@@ -361,10 +373,11 @@ const MusicDiscovery = () => {
       let maxTrackSeeds, maxArtistSeeds, maxGenreSeeds;
       
       if (hasTracks) {
-        // If we have tracks, use them as primary seeds (2-3 tracks work best)
-        maxTrackSeeds = Math.min(seed_tracks.length, 3);
-        maxArtistSeeds = Math.min(seed_artists.length, Math.max(0, 5 - maxTrackSeeds));
-        maxGenreSeeds = Math.min(seed_genres.length, Math.max(0, 5 - maxTrackSeeds - maxArtistSeeds));
+        // If we have tracks, use ONLY tracks (no artists) - Spotify works better with pure track seeds
+        // Use 2-5 track seeds for best results
+        maxTrackSeeds = Math.min(seed_tracks.length, 5);
+        maxArtistSeeds = 0; // Don't mix tracks and artists - can cause 404s
+        maxGenreSeeds = 0;
       } else if (hasArtists) {
         // If we have artists but no tracks, use multiple artists (at least 2-3 for better results)
         // Spotify works better with multiple artist seeds
@@ -436,6 +449,17 @@ const MusicDiscovery = () => {
       });
 
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      
+      // Log full response for debugging
+      if (!res.ok) {
+        const errorBody = await res.clone().json().catch(() => ({ message: 'Unknown error' }));
+        console.error('Spotify API Error:', {
+          status: res.status,
+          statusText: res.statusText,
+          url: url.substring(0, 100) + '...',
+          error: errorBody
+        });
+      }
 
       if (res.status === 401) {
         localStorage.removeItem('spotify_token');
@@ -467,30 +491,41 @@ const MusicDiscovery = () => {
         } else if (res.status === 404) {
           // Not found - could be invalid endpoint, token issue, or invalid seed IDs
           console.error('404 Error - Check if seed IDs are valid. Artist IDs:', seed_artists.slice(0, maxArtistSeeds));
+          console.error('Track IDs:', seed_tracks.slice(0, maxTrackSeeds));
           
-          // Try with just track seeds if we have any, or use genre fallback
-          if (seed_tracks.length > 0 && maxArtistSeeds > 0) {
-            console.log('Retrying with track seeds only...');
+          // If we have tracks, try with ONLY tracks (no artists)
+          if (seed_tracks.length > 0) {
+            console.log('Retrying with track seeds only (no artists)...');
             const trackOnlyParams = new URLSearchParams();
             trackOnlyParams.set('limit', '20');
             trackOnlyParams.set('market', userStats?.country || 'US');
-            trackOnlyParams.set('seed_tracks', seed_tracks.slice(0, 2).join(','));
+            // Use 2-5 track seeds for best results
+            const trackSeedCount = Math.min(seed_tracks.length, 5);
+            trackOnlyParams.set('seed_tracks', seed_tracks.slice(0, trackSeedCount).join(','));
             
             const retryUrl = `https://api.spotify.com/v1/recommendations?${trackOnlyParams.toString()}`;
+            console.log('Retry URL:', retryUrl);
             const retryRes = await fetch(retryUrl, { headers: { Authorization: `Bearer ${token}` } });
             
             if (retryRes.ok) {
               const retryData = await retryRes.json();
               if (retryData?.tracks?.length) {
+                console.log('Success with track-only seeds! Got', retryData.tracks.length, 'tracks');
                 setRecommendations(retryData.tracks);
                 setCurrentTrack(retryData.tracks[0]);
                 setIsLoading(false);
                 return;
+              } else {
+                console.error('Retry succeeded but no tracks returned:', retryData);
               }
+            } else {
+              const retryError = await retryRes.json().catch(() => ({}));
+              console.error('Retry also failed:', retryRes.status, retryError);
             }
           }
           
-          alert('Could not load recommendations. The artist IDs may be invalid. Please try reconnecting to Spotify.');
+          // If still failing, the token might be invalid or IDs are wrong
+          alert('Could not load recommendations. Please try disconnecting and reconnecting to Spotify.');
         } else {
           alert(`Failed to load recommendations (${res.status}). Try reconnecting.`);
         }
