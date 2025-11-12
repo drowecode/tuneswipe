@@ -186,10 +186,10 @@ const MusicDiscovery = () => {
         spotifyId: profile.id,
         topArtists: topArtists.items || [],
         topTracks: topTracks.items || [],
-        topGenres: topGenres,
-        country: profile?.country || 'US'
-      };
-      setUserStats(userData);
+        topGenres: topGenres
+      }
+
+      setUserStats(userData)
 
       // Create/update Firebase user profile
       try {
@@ -214,8 +214,7 @@ const MusicDiscovery = () => {
       setIsConnected(true)
       
       // Get initial recommendations once stats are ready
-      // Pass both artists and tracks directly (before userStats is fully set)
-      await getRecommendations(topArtists.items || [], token, topTracks.items || []);
+      await getRecommendations(topArtists.items || [], token);
 
       setIsLoading(false)
     } catch (error) {
@@ -225,420 +224,124 @@ const MusicDiscovery = () => {
     }
   }
 
-  // --- helpers ---
-  let _genreSeeds = null;
-  const getGenreSeeds = async (token) => {
-    if (_genreSeeds) return _genreSeeds;
-    try {
-      const r = await fetch('https://api.spotify.com/v1/recommendations/available-genre-seeds', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (r.ok) {
-        const data = await r.json();
-        _genreSeeds = data.genres || [];
-        return _genreSeeds;
-      } else {
-        console.warn('Genre seeds endpoint failed:', r.status, await r.text().catch(() => ''));
-        // Return empty array if it fails - not critical
-        return [];
-      }
-    } catch (e) {
-      console.warn('Genre seeds fetch error:', e);
-      return [];
-    }
-  };
+// --- helpers ---
+let _genreSeeds = null;
+const getGenreSeeds = async (token) => {
+  if (_genreSeeds) return _genreSeeds;
+  const r = await fetch('https://api.spotify.com/v1/recommendations/available-genre-seeds', {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  _genreSeeds = r.ok ? (await r.json()).genres : [];
+  return _genreSeeds;
+};
 
-  const isSpotifyId = v => {
-    if (!v || typeof v !== 'string') return false;
-    // Spotify IDs are exactly 22 characters, alphanumeric
-    const isValid = /^[0-9A-Za-z]{22}$/.test(v);
-    if (!isValid && v) {
-      console.warn('Invalid Spotify ID format:', v, 'Length:', v.length);
-    }
-    return isValid;
-  };
+const isSpotifyId = v => typeof v === 'string' && /^[0-9A-Za-z]{22}$/.test(v);
 
-  // --- drop-in replacement ---
-  const getRecommendations = async (topArtists, token, topTracks = null) => {
-    // Use passed tracks or fall back to userStats
-    const tracks = topTracks || userStats?.topTracks || [];
-    
-    console.log('getRecommendations called with:', {
-      topArtistsCount: Array.isArray(topArtists) ? topArtists.length : null,
-      topTracksCount: Array.isArray(tracks) ? tracks.length : null,
-      hasToken: !!token, 
-      discoveryMode
-    });
-    if (!Array.isArray(topArtists) || topArtists.length === 0 || !token) return;
+// --- drop-in replacement ---
+const getRecommendations = async (topArtists, token) => {
+  console.log('getRecommendations called with:', {
+    topArtistsCount: Array.isArray(topArtists) ? topArtists.length : null,
+    hasToken: !!token, discoveryMode
+  });
+  if (!Array.isArray(topArtists) || topArtists.length === 0 || !token) return;
 
-    // First, verify the token works with a simple API call
-    try {
-      const testResponse = await fetch('https://api.spotify.com/v1/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (testResponse.status === 401) {
-        console.error('Token is invalid or expired');
-        localStorage.removeItem('spotify_token');
-        localStorage.removeItem('spotify_token_expiry');
-        setIsConnected(false);
-        alert('Your Spotify session has expired. Please reconnect.');
-        return;
-      }
-      if (!testResponse.ok) {
-        console.error('Token validation failed:', testResponse.status);
-      }
-    } catch (e) {
-      console.error('Failed to validate token:', e);
-    }
+  try {
+    // split familiar/exploratory
+    const familiarCount = Math.max(1, Math.floor((1 - discoveryMode / 100) * 3));
+    const exploratoryCount = Math.max(0, 3 - familiarCount);
 
-    try {
-      // split familiar/exploratory
-      const familiarCount = Math.max(1, Math.floor((1 - discoveryMode / 100) * 3));
-      const exploratoryCount = Math.max(0, 3 - familiarCount);
+    // familiar seeds
+    const familiarSeeds = topArtists.slice(0, familiarCount).map(a => a?.id).filter(isSpotifyId);
 
-      // familiar seeds - ensure we extract valid IDs
-      const familiarSeeds = topArtists
-        .slice(0, familiarCount)
-        .map(a => {
-          const id = a?.id || a?.uri?.split(':')?.pop();
-          return id;
-        })
-        .filter(isSpotifyId);
-      
-      console.log('Familiar seeds extracted:', familiarSeeds.length, 'from', familiarCount, 'artists');
-
-      // exploratory via related-artists (best-effort + guarded)
-      let exploratorySeeds = [];
-      if (exploratoryCount > 0 && topArtists.length) {
-        try {
-          const pick = topArtists[Math.floor(Math.random() * Math.min(5, topArtists.length))];
-          if (isSpotifyId(pick?.id)) {
-            const rel = await fetch(`https://api.spotify.com/v1/artists/${pick.id}/related-artists`, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            if (rel.ok) {
-              const j = await rel.json();
-              exploratorySeeds = (j.artists || [])
-                .slice(0, exploratoryCount)
-                .map(a => a?.id)
-                .filter(isSpotifyId);
-            } else if (rel.status === 401) {
-              // Token expired
-              localStorage.removeItem('spotify_token');
-              localStorage.removeItem('spotify_token_expiry');
-              setIsConnected(false);
-              alert('Session expired. Please reconnect to Spotify.');
-              return;
-            } else {
-              console.warn('related-artists failed:', rel.status, await rel.text().catch(() => ''));
-            }
-          }
-        } catch (e) { 
-            console.warn('related-artists error:', e);
-            // Continue without exploratory seeds if related-artists fails
-          }
-      }
-
-      // reliable track seeds - prefer tracks as they're more reliable than artists
-      const trackSeeds = (tracks || [])
-        .slice(0, 5)
-        .map(t => {
-          const id = t?.id || t?.uri?.split(':')?.pop();
-          if (!id) {
-            console.warn('Track missing ID:', t);
-          }
-          return id;
-        })
-        .filter(id => {
-          const isValid = isSpotifyId(id);
-          if (!isValid && id) {
-            console.warn('Invalid track ID:', id, 'from track:', tracks.find(t => (t?.id || t?.uri?.split(':')?.pop()) === id));
-          }
-          return isValid;
-        });
-      
-      console.log('Track seeds extracted:', trackSeeds.length, 'from', tracks.length, 'tracks');
-      console.log('Track seed IDs:', trackSeeds);
-
-      // dedupe + clamp artist seeds
-      const seed_artists = [...new Set([...familiarSeeds, ...exploratorySeeds])].slice(0, 5);
-      const seed_tracks  = trackSeeds.slice(0, 5);
-
-      // Get genre seeds as additional fallback
-      let seed_genres = [];
+    // exploratory via related-artists (best-effort + guarded)
+    let exploratorySeeds = [];
+    if (exploratoryCount > 0 && topArtists.length) {
       try {
-        const allowed = new Set(await getGenreSeeds(token));
-        seed_genres = (userStats?.topGenres || [])
-          .map(g => g?.name?.toLowerCase().replace(/\s+/g, '-'))
-          .filter(g => g && allowed.has(g))
-          .slice(0, 5);
-      } catch (e) {
-        console.warn('Failed to get genre seeds:', e);
-      }
-
-      // Strategy: Prioritize tracks > artists > genres
-      // If we have tracks, use them primarily (they're most reliable)
-      // If no tracks, use artists + genres combination
-      const hasTracks = seed_tracks.length > 0;
-      const hasArtists = seed_artists.length > 0;
-      
-      console.log('Seed availability:', { 
-        tracks: seed_tracks.length, 
-        artists: seed_artists.length, 
-        genres: seed_genres.length,
-        willUseTracks: hasTracks
-      });
-
-      // Final validation - we must have at least one seed
-      if (!seed_artists.length && !seed_tracks.length && !seed_genres.length) {
-        console.error('No valid seeds available after all fallbacks');
-        alert('Not enough listening history to generate recommendations. Please listen to more music on Spotify first.');
-        setIsLoading(false);
-        return;
-      }
-
-      // safe URL assembly (prevents malformed queries → 404)
-      // Spotify requires at least 1 seed and max 5 total seeds
-      // Strategy: Prefer tracks (most reliable), then artists, then genres
-      let maxTrackSeeds, maxArtistSeeds, maxGenreSeeds;
-      
-      if (hasTracks) {
-        // If we have tracks, use ONLY tracks (no artists) - Spotify works better with pure track seeds
-        // Use 2-5 track seeds for best results
-        maxTrackSeeds = Math.min(seed_tracks.length, 5);
-        maxArtistSeeds = 0; // Don't mix tracks and artists - can cause 404s
-        maxGenreSeeds = 0;
-        console.log('Using track-only seeds:', maxTrackSeeds, 'tracks');
-      } else if (hasArtists) {
-        // If we have artists but no tracks, use multiple artists (at least 2-3 for better results)
-        // Spotify works better with multiple artist seeds
-        maxArtistSeeds = Math.min(seed_artists.length, 5); // Use up to 5 artists if we have them
-        maxGenreSeeds = Math.min(seed_genres.length, Math.max(0, 5 - maxArtistSeeds));
-        maxTrackSeeds = 0;
-        
-        // If we only have 1 artist, try to get more from related artists
-        if (maxArtistSeeds === 1 && seed_artists.length > 0) {
-          console.warn('Only 1 artist seed available - Spotify may reject this. Trying to get more...');
-          // Try to get related artists from the single artist we have
-          try {
-            const relatedResponse = await fetch(`https://api.spotify.com/v1/artists/${seed_artists[0]}/related-artists`, {
-              headers: { Authorization: `Bearer ${token}` }
-            });
-            if (relatedResponse.ok) {
-              const relatedData = await relatedResponse.json();
-              const additionalArtists = (relatedData.artists || [])
-                .slice(0, 4)
-                .map(a => a?.id)
-                .filter(isSpotifyId);
-              if (additionalArtists.length > 0) {
-                seed_artists.push(...additionalArtists);
-                maxArtistSeeds = Math.min(seed_artists.length, 5);
-                console.log('Added related artists, now have', maxArtistSeeds, 'artist seeds');
-              }
-            }
-          } catch (e) {
-            console.warn('Could not get related artists:', e);
+        const pick = topArtists[Math.floor(Math.random() * Math.min(5, topArtists.length))];
+        if (isSpotifyId(pick?.id)) {
+          const rel = await fetch(`https://api.spotify.com/v1/artists/${pick.id}/related-artists`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (rel.ok) {
+            const j = await rel.json();
+            exploratorySeeds = (j.artists || [])
+              .slice(0, exploratoryCount)
+              .map(a => a?.id)
+              .filter(isSpotifyId);
+          } else {
+            console.warn('related-artists failed:', rel.status);
           }
         }
-      } else {
-        // Fallback to genres only
-        maxGenreSeeds = Math.min(seed_genres.length, 5);
-        maxArtistSeeds = 0;
-        maxTrackSeeds = 0;
-      }
-      
-      // Final validation - ensure we have at least 1 seed total
-      if (maxArtistSeeds + maxTrackSeeds + maxGenreSeeds === 0) {
-        console.error('No valid seeds after limiting');
-        alert('Not enough listening history to generate recommendations. Please listen to more music on Spotify first.');
-        setIsLoading(false);
-        return;
-      }
-
-      // Build parameters - Spotify recommendations API requires at least 1 seed
-      // Important: Use comma-separated values, not multiple params
-      const params = new URLSearchParams();
-      params.set('limit', '20');
-      
-      // Market parameter - use from user profile or default to US
-      const market = userStats?.country || 'US';
-      params.set('market', market);
-      
-      // Spotify requires at least 1 seed - validate we have valid seeds
-      let seedCount = 0;
-      if (maxTrackSeeds > 0) {
-        const trackIds = seed_tracks.slice(0, maxTrackSeeds);
-        console.log('Using track IDs:', trackIds);
-        // Join with comma - Spotify expects comma-separated string
-        params.set('seed_tracks', trackIds.join(','));
-        seedCount = trackIds.length;
-      } else if (maxArtistSeeds > 0) {
-        const artistIds = seed_artists.slice(0, maxArtistSeeds);
-        console.log('Using artist IDs:', artistIds);
-        params.set('seed_artists', artistIds.join(','));
-        seedCount = artistIds.length;
-      } else if (maxGenreSeeds > 0) {
-        const genreNames = seed_genres.slice(0, maxGenreSeeds);
-        console.log('Using genre names:', genreNames);
-        params.set('seed_genres', genreNames.join(','));
-        seedCount = genreNames.length;
-      } else {
-        console.error('No valid seeds to use!');
-        alert('No valid seeds available. Please try reconnecting to Spotify.');
-        setIsLoading(false);
-        return;
-      }
-
-      // Validate we have at least 1 seed (Spotify requirement)
-      if (seedCount === 0) {
-        console.error('Seed count is 0!');
-        alert('No valid seeds available. Please try reconnecting to Spotify.');
-        setIsLoading(false);
-        return;
-      }
-
-      const url = `https://api.spotify.com/v1/recommendations?${params.toString()}`;
-      console.log('Final Recs URL:', url);
-      console.log('URL breakdown:', {
-        limit: params.get('limit'),
-        market: params.get('market'),
-        seed_tracks: params.get('seed_tracks'),
-        seed_artists: params.get('seed_artists'),
-        seed_genres: params.get('seed_genres'),
-        seedCount
-      });
-      console.log('Seeds:', { 
-        artists: seed_artists.slice(0, maxArtistSeeds), 
-        tracks: seed_tracks.slice(0, maxTrackSeeds), 
-        genres: seed_genres.slice(0, maxGenreSeeds),
-        artistIds: seed_artists.slice(0, maxArtistSeeds),
-        trackIds: seed_tracks.slice(0, maxTrackSeeds)
-      });
-
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-      
-      // Log full response for debugging
-      if (!res.ok) {
-        const errorBody = await res.clone().json().catch(() => ({ message: 'Unknown error' }));
-        console.error('Spotify API Error:', {
-          status: res.status,
-          statusText: res.statusText,
-          url: url.substring(0, 100) + '...',
-          error: errorBody
-        });
-      }
-
-      if (res.status === 401) {
-        localStorage.removeItem('spotify_token');
-        localStorage.removeItem('spotify_token_expiry');
-        setIsConnected(false);
-        alert('Session expired. Please reconnect to Spotify.');
-        return;
-      }
-      if (res.status === 429) {
-        const wait = Number(res.headers.get('Retry-After') || 1);
-        await new Promise(r => setTimeout(r, wait * 1000));
-        return getRecommendations(topArtists, token, tracks);
-      }
-      if (!res.ok) {
-        let errorText = '';
-        try {
-          const errorData = await res.json();
-          errorText = JSON.stringify(errorData);
-          console.error('Recs failed:', res.status, errorData);
-        } catch (e) {
-          errorText = await res.text().catch(() => '');
-          console.error('Recs failed:', res.status, errorText);
-        }
-        
-        if (res.status === 400) {
-          // Bad request - likely invalid seed parameters
-          console.error('Invalid seeds - artist IDs:', seed_artists.slice(0, maxArtistSeeds));
-          alert('Invalid recommendation parameters. Please try adjusting the discovery mode or reconnect to Spotify.');
-        } else if (res.status === 404) {
-          // Not found - could be invalid endpoint, token issue, or invalid seed IDs
-          console.error('404 Error - Check if seed IDs are valid. Artist IDs:', seed_artists.slice(0, maxArtistSeeds));
-          console.error('Track IDs:', seed_tracks.slice(0, maxTrackSeeds));
-          
-          // If we have tracks, try with ONLY tracks (no artists)
-          if (seed_tracks.length > 0) {
-            console.log('Retrying with track seeds only (no artists)...');
-            const trackOnlyParams = new URLSearchParams();
-            trackOnlyParams.set('limit', '20');
-            trackOnlyParams.set('market', userStats?.country || 'US');
-            // Use 2-5 track seeds for best results
-            const trackSeedCount = Math.min(seed_tracks.length, 5);
-            const trackIdsToUse = seed_tracks.slice(0, trackSeedCount);
-            console.log('Retry track IDs:', trackIdsToUse);
-            trackOnlyParams.set('seed_tracks', trackIdsToUse.join(','));
-            
-            const retryUrl = `https://api.spotify.com/v1/recommendations?${trackOnlyParams.toString()}`;
-            console.log('Retry URL:', retryUrl);
-            
-            // First verify one of the track IDs is valid
-            if (trackIdsToUse.length > 0) {
-              try {
-                const trackTest = await fetch(`https://api.spotify.com/v1/tracks/${trackIdsToUse[0]}`, {
-                  headers: { Authorization: `Bearer ${token}` }
-                });
-                if (trackTest.ok) {
-                  console.log('Track ID is valid:', trackIdsToUse[0]);
-                } else {
-                  console.error('Track ID validation failed:', trackTest.status, await trackTest.json().catch(() => ({})));
-                }
-              } catch (e) {
-                console.error('Failed to validate track ID:', e);
-              }
-            }
-            
-            const retryRes = await fetch(retryUrl, { headers: { Authorization: `Bearer ${token}` } });
-            
-            if (retryRes.ok) {
-              const retryData = await retryRes.json();
-              if (retryData?.tracks?.length) {
-                console.log('Success with track-only seeds! Got', retryData.tracks.length, 'tracks');
-                setRecommendations(retryData.tracks);
-                setCurrentTrack(retryData.tracks[0]);
-                setIsLoading(false);
-                return;
-              } else {
-                console.error('Retry succeeded but no tracks returned:', retryData);
-              }
-            } else {
-              const retryError = await retryRes.json().catch(() => ({}));
-              console.error('Retry also failed:', retryRes.status, retryError);
-              
-              // If 404 on recommendations with valid track IDs, token might not have right scopes
-              if (retryRes.status === 404) {
-                console.error('404 on recommendations with valid track IDs - token may lack required scopes');
-                alert('Spotify API access issue. Please disconnect and reconnect to Spotify to refresh permissions.');
-              }
-            }
-          }
-          
-          // If still failing, the token might be invalid or IDs are wrong
-          alert('Could not load recommendations. Please try disconnecting and reconnecting to Spotify.');
-        } else {
-          alert(`Failed to load recommendations (${res.status}). Try reconnecting.`);
-        }
-        setIsLoading(false);
-        return;
-      }
-
-      const data = await res.json();
-      if (data?.tracks?.length) {
-        setRecommendations(data.tracks);
-        setCurrentTrack(data.tracks[0]);
-      } else {
-        alert('No recommendations right now. Try adjusting the slider.');
-      }
-    } catch (err) {
-      console.error('Error getting recommendations:', err);
-      alert('Error loading recommendations. Check console and try again.');
-    } finally {
-      setIsLoading(false);
+      } catch (e) { console.warn('related-artists error:', e); }
     }
-  };
+
+    // reliable track seeds
+    const trackSeeds = (userStats?.topTracks || [])
+      .slice(0, 2).map(t => t?.id).filter(isSpotifyId);
+
+    // dedupe + clamp
+    const seed_artists = [...new Set([...familiarSeeds, ...exploratorySeeds])].slice(0, 3);
+    const seed_tracks  = trackSeeds.slice(0, 2);
+
+    // fallback to allowed genre seeds
+    let seed_genres = [];
+    if (seed_artists.length + seed_tracks.length === 0) {
+      const allowed = new Set(await getGenreSeeds(token));
+      seed_genres = (userStats?.topGenres || [])
+        .map(g => g?.name?.toLowerCase().replace(/\s+/g, '-'))
+        .filter(g => g && allowed.has(g))
+        .slice(0, 5);
+    }
+
+    if (!seed_artists.length && !seed_tracks.length && !seed_genres.length) {
+      alert('Not enough listening history to generate recommendations yet.');
+      return;
+    }
+
+    // safe URL assembly (prevents malformed queries → 404)
+    const params = new URLSearchParams({ limit: '20', min_popularity: '20' });
+    params.set('market', userStats?.country || 'US');
+    if (seed_artists.length) params.set('seed_artists', seed_artists.join(','));
+    if (seed_tracks.length)  params.set('seed_tracks',  seed_tracks.join(','));
+    if (seed_genres.length)  params.set('seed_genres',  seed_genres.join(','));
+
+    const url = `https://api.spotify.com/v1/recommendations?${params.toString()}`;
+    console.log('Recs URL:', url);
+
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+
+    if (res.status === 401) {
+      localStorage.removeItem('spotify_token');
+      localStorage.removeItem('spotify_token_expiry');
+      setIsConnected(false);
+      alert('Session expired. Please reconnect to Spotify.');
+      return;
+    }
+    if (res.status === 429) {
+      const wait = Number(res.headers.get('Retry-After') || 1);
+      await new Promise(r => setTimeout(r, wait * 1000));
+      return getRecommendations(topArtists, token);
+    }
+    if (!res.ok) {
+      console.error('Recs failed:', res.status, await res.text());
+      alert(`Failed to load recommendations (${res.status}). Try reconnecting.`);
+      return;
+    }
+
+    const data = await res.json();
+    if (data?.tracks?.length) {
+      setRecommendations(data.tracks);
+      setCurrentTrack(data.tracks[0]);
+    } else {
+      alert('No recommendations right now. Try adjusting the slider.');
+    }
+  } catch (err) {
+    console.error('Error getting recommendations:', err);
+    alert('Error loading recommendations. Check console and try again.');
+  } finally {
+    setIsLoading(false);
+  }
+};
   // Add track to Spotify liked songs
   const addToSpotifyLiked = async (trackUri) => {
     if (!spotifyToken) return
@@ -723,10 +426,11 @@ const MusicDiscovery = () => {
     }
   }
 
+  // Update recommendations when discovery mode changes
   useEffect(() => {
   if (isConnected && spotifyToken && userStats?.topArtists?.length) {
     setIsLoading(true);
-    getRecommendations(userStats.topArtists, spotifyToken, userStats.topTracks || []);
+    getRecommendations(userStats.topArtists, spotifyToken);
   }
   }, [discoveryMode]);
   
