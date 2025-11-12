@@ -287,13 +287,30 @@ const MusicDiscovery = () => {
 
   // Play a track using Spotify Web Playback SDK
   const playTrack = async (trackUri) => {
-    if (!deviceId || !spotifyToken || !playerReady) {
-      console.log('Player not ready yet')
+    if (!deviceId || !spotifyToken) {
+      console.log('Player not ready - deviceId:', deviceId, 'token:', !!spotifyToken)
       return
     }
 
     try {
-      await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+      // First, transfer playback to this device
+      await fetch('https://api.spotify.com/v1/me/player', {
+        method: 'PUT',
+        body: JSON.stringify({ 
+          device_ids: [deviceId],
+          play: false
+        }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${spotifyToken}`
+        }
+      })
+
+      // Small delay to ensure transfer completes
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Now play the track
+      const response = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
         method: 'PUT',
         body: JSON.stringify({ uris: [trackUri] }),
         headers: {
@@ -301,6 +318,18 @@ const MusicDiscovery = () => {
           'Authorization': `Bearer ${spotifyToken}`
         }
       })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error('Play error:', errorData)
+        
+        // If premium required, inform user
+        if (errorData.error?.reason === 'PREMIUM_REQUIRED') {
+          alert('Spotify Premium is required to use the web player. You can still browse and like songs!')
+        }
+      } else {
+        console.log('Successfully started playback')
+      }
     } catch (error) {
       console.error('Error playing track:', error)
     }
@@ -309,7 +338,11 @@ const MusicDiscovery = () => {
   // Toggle play/pause
   const togglePlayback = () => {
     if (player) {
-      player.togglePlay()
+      player.togglePlay().then(() => {
+        console.log('Toggled playback')
+      }).catch(error => {
+        console.error('Error toggling playback:', error)
+      })
     }
   }
 
@@ -401,9 +434,11 @@ const MusicDiscovery = () => {
         setRecommendations(selectedTracks)
         setCurrentTrack(selectedTracks[0])
         
-        // Auto-play the first track
-        if (selectedTracks[0].uri) {
-          playTrack(selectedTracks[0].uri)
+        // Try to auto-play the first track (will fail gracefully if no premium)
+        if (selectedTracks[0].uri && deviceId) {
+          setTimeout(() => {
+            playTrack(selectedTracks[0].uri)
+          }, 1000)
         }
         
         console.log('Successfully loaded:', selectedTracks[0].name, 'by', selectedTracks[0].artists[0].name)
@@ -495,9 +530,11 @@ const MusicDiscovery = () => {
       const nextTrack = recommendations[currentIndex + 1]
       setCurrentTrack(nextTrack)
       
-      // Auto-play next track
-      if (nextTrack.uri) {
-        playTrack(nextTrack.uri)
+      // Auto-play next track (with delay to ensure player is ready)
+      if (nextTrack.uri && deviceId) {
+        setTimeout(() => {
+          playTrack(nextTrack.uri)
+        }, 500)
       }
     } else {
       // Get more recommendations when we run out
@@ -654,11 +691,26 @@ const MusicDiscovery = () => {
                   className="playback-btn"
                   onClick={togglePlayback}
                   title={isPlaying ? "Pause" : "Play"}
+                  disabled={!playerReady}
                 >
                   {isPlaying ? '⏸' : '▶'}
                 </button>
-                {!playerReady && <span className="player-status">Connecting player...</span>}
+                
+                <button
+                  className="spotify-open-btn"
+                  onClick={() => window.open(currentTrack.external_urls?.spotify || `https://open.spotify.com/track/${currentTrack.id}`, '_blank')}
+                  title="Open in Spotify"
+                >
+                  🎵 Open in Spotify
+                </button>
               </div>
+              
+              {!playerReady && (
+                <div className="player-info">
+                  <span className="player-status">Connecting player...</span>
+                  <span className="player-note">Note: Web playback requires Spotify Premium</span>
+                </div>
+              )}
 
               {/* Simplified Reaction Buttons - X and Check */}
               <div className="reaction-buttons-simple">
