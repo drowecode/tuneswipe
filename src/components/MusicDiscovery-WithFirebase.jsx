@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Heart, ThumbsUp, Meh, ThumbsDown, TrendingUp, Music, User, BarChart3, Sliders, Plus } from 'lucide-react'
+import { Heart, ThumbsUp, Meh, ThumbsDown, TrendingUp, Music, User, BarChart3, Sliders, Plus, Check, X } from 'lucide-react'
 import './MusicDiscovery.css'
 import { createUserProfile, savePreference, getUserPreferences, onAuthChange } from './firebase'
 
@@ -10,6 +10,12 @@ const MusicDiscovery = () => {
   const [currentView, setCurrentView] = useState('discover') // discover, stats
   const [discoveryMode, setDiscoveryMode] = useState(50) // 0-100, 0=familiar, 100=exploratory
   const [isLoading, setIsLoading] = useState(false)
+  
+  // Spotify Web Player
+  const [player, setPlayer] = useState(null)
+  const [deviceId, setDeviceId] = useState(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [playerReady, setPlayerReady] = useState(false)
   
   // User data
   const [userStats, setUserStats] = useState(null)
@@ -31,7 +37,12 @@ const MusicDiscovery = () => {
     'user-library-modify',
     'user-library-read',
     'user-top-read',
-    'user-read-recently-played'
+    'user-read-recently-played',
+    'streaming',
+    'user-read-email',
+    'user-read-private',
+    'user-modify-playback-state',
+    'user-read-playback-state'
   ]
 
   // PKCE helper functions
@@ -70,6 +81,56 @@ const MusicDiscovery = () => {
       exchangeCodeForToken(code)
     }
   }, [])
+
+  // Initialize Spotify Web Playback SDK
+  useEffect(() => {
+    if (!spotifyToken) return
+
+    const script = document.createElement('script')
+    script.src = 'https://sdk.scdn.co/spotify-player.js'
+    script.async = true
+    document.body.appendChild(script)
+
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      const newPlayer = new window.Spotify.Player({
+        name: 'TuneSwipe Player',
+        getOAuthToken: cb => { cb(spotifyToken) },
+        volume: 0.5
+      })
+
+      // Ready
+      newPlayer.addListener('ready', ({ device_id }) => {
+        console.log('Web Playback SDK Ready with Device ID:', device_id)
+        setDeviceId(device_id)
+        setPlayerReady(true)
+      })
+
+      // Not Ready
+      newPlayer.addListener('not_ready', ({ device_id }) => {
+        console.log('Device has gone offline', device_id)
+      })
+
+      // Player state changed
+      newPlayer.addListener('player_state_changed', state => {
+        if (!state) return
+        setIsPlaying(!state.paused)
+      })
+
+      newPlayer.connect().then(success => {
+        if (success) {
+          console.log('Successfully connected to Spotify Web Player')
+        }
+      })
+
+      setPlayer(newPlayer)
+    }
+
+    return () => {
+      if (player) {
+        player.disconnect()
+      }
+    }
+  }, [spotifyToken])
 
   // Exchange authorization code for access token
   const exchangeCodeForToken = async (code) => {
@@ -224,6 +285,34 @@ const MusicDiscovery = () => {
     }
   }
 
+  // Play a track using Spotify Web Playback SDK
+  const playTrack = async (trackUri) => {
+    if (!deviceId || !spotifyToken || !playerReady) {
+      console.log('Player not ready yet')
+      return
+    }
+
+    try {
+      await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ uris: [trackUri] }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${spotifyToken}`
+        }
+      })
+    } catch (error) {
+      console.error('Error playing track:', error)
+    }
+  }
+
+  // Toggle play/pause
+  const togglePlayback = () => {
+    if (player) {
+      player.togglePlay()
+    }
+  }
+
   // Get recommendations using audio features (works in Development Mode)
   const getRecommendations = async (topArtists, token) => {
     console.log('getRecommendations called (using audio features approach)')
@@ -311,6 +400,12 @@ const MusicDiscovery = () => {
       if (selectedTracks.length > 0) {
         setRecommendations(selectedTracks)
         setCurrentTrack(selectedTracks[0])
+        
+        // Auto-play the first track
+        if (selectedTracks[0].uri) {
+          playTrack(selectedTracks[0].uri)
+        }
+        
         console.log('Successfully loaded:', selectedTracks[0].name, 'by', selectedTracks[0].artists[0].name)
       } else {
         alert('No tracks available. Try playing more music on Spotify!')
@@ -397,7 +492,13 @@ const MusicDiscovery = () => {
     )
     
     if (currentIndex < recommendations.length - 1) {
-      setCurrentTrack(recommendations[currentIndex + 1])
+      const nextTrack = recommendations[currentIndex + 1]
+      setCurrentTrack(nextTrack)
+      
+      // Auto-play next track
+      if (nextTrack.uri) {
+        playTrack(nextTrack.uri)
+      }
     } else {
       // Get more recommendations when we run out
       if (userStats?.topArtists && spotifyToken) {
@@ -547,35 +648,34 @@ const MusicDiscovery = () => {
                 </button>
               </div>
 
-              {/* Reaction Buttons */}
-              <div className="reaction-buttons">
+              {/* Web Player Controls */}
+              <div className="playback-controls">
                 <button 
-                  className="reaction-btn dislike-btn"
+                  className="playback-btn"
+                  onClick={togglePlayback}
+                  title={isPlaying ? "Pause" : "Play"}
+                >
+                  {isPlaying ? '⏸' : '▶'}
+                </button>
+                {!playerReady && <span className="player-status">Connecting player...</span>}
+              </div>
+
+              {/* Simplified Reaction Buttons - X and Check */}
+              <div className="reaction-buttons-simple">
+                <button 
+                  className="reaction-btn-large dislike-btn-large"
                   onClick={() => handleReaction('dislike')}
-                  title="Dislike"
+                  title="Dislike - Skip this song"
                 >
-                  <ThumbsDown size={28} />
+                  <X size={40} strokeWidth={3} />
                 </button>
+                
                 <button 
-                  className="reaction-btn meh-btn"
-                  onClick={() => handleReaction('meh')}
-                  title="Meh"
-                >
-                  <Meh size={28} />
-                </button>
-                <button 
-                  className="reaction-btn like-btn"
+                  className="reaction-btn-large like-btn-large"
                   onClick={() => handleReaction('like', true)}
-                  title="Like & Add to Spotify"
+                  title="Like - Add to Spotify & Continue"
                 >
-                  <ThumbsUp size={28} />
-                </button>
-                <button 
-                  className="reaction-btn love-btn"
-                  onClick={() => handleReaction('love', true)}
-                  title="Love & Add to Spotify"
-                >
-                  <Heart size={28} />
+                  <Check size={40} strokeWidth={3} />
                 </button>
               </div>
             </div>

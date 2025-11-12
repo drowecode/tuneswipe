@@ -380,55 +380,101 @@
   transform: translateY(0);
 }
 
-.reaction-buttons {
+/* Playback Controls */
+.playback-controls {
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 1rem;
-  padding: 0 2rem 2rem 2rem;
+  padding: 1.5rem 2rem 0 2rem;
 }
 
-.reaction-btn {
-  width: 64px;
-  height: 64px;
+.playback-btn {
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
-  border: 2px solid #282828;
+  background: #1DB954;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 15px rgba(29, 185, 84, 0.4);
 }
 
-.reaction-btn:hover {
+.playback-btn:hover {
   transform: scale(1.1);
-  border-color: transparent;
+  background: #1ed760;
 }
 
-.reaction-btn:active {
+.playback-btn:active {
   transform: scale(0.95);
 }
 
-.love-btn {
+.player-status {
+  font-size: 0.875rem;
+  color: #b3b3b3;
+  font-style: italic;
+}
+
+/* Simplified Large Reaction Buttons - Check and X */
+.reaction-buttons-simple {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 3rem;
+  padding: 2rem;
+  background: #181818;
+}
+
+.reaction-btn-large {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+}
+
+.reaction-btn-large:hover {
+  transform: scale(1.15);
+}
+
+.reaction-btn-large:active {
+  transform: scale(0.9);
+}
+
+.like-btn-large {
   background: #1DB954;
   color: white;
 }
 
-.like-btn {
-  background: #1DB954;
-  opacity: 0.8;
+.like-btn-large:hover {
+  background: #1ed760;
+  box-shadow: 0 8px 24px rgba(29, 185, 84, 0.6);
+}
+
+.dislike-btn-large {
+  background: #282828;
+  color: #b3b3b3;
+}
+
+.dislike-btn-large:hover {
+  background: #ff4444;
   color: white;
+  box-shadow: 0 8px 24px rgba(255, 68, 68, 0.5);
 }
 
-.meh-btn {
-  background: #282828;
-  color: #b3b3b3;
-}
-
-.dislike-btn {
-  background: #282828;
-  color: #b3b3b3;
-  opacity: 0.6;
+/* Hide old reaction buttons */
+.reaction-buttons {
+  display: none;
 }
 
 .loading-message {
