@@ -224,14 +224,19 @@ const MusicDiscovery = () => {
   const fetchAllLikedSongs = async (token) => {
     const likedIds = new Set()
     let url = 'https://api.spotify.com/v1/me/tracks?limit=50'
+    let pageCount = 0
+    const MAX_PAGES = 20 // Limit to 1000 songs max
     
     try {
-      while (url) {
+      while (url && pageCount < MAX_PAGES) {
         const response = await fetch(url, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
         
-        if (!response.ok) break
+        if (!response.ok) {
+          console.warn('Could not fetch page', pageCount, 'of liked songs')
+          break
+        }
         
         const data = await response.json()
         
@@ -244,14 +249,18 @@ const MusicDiscovery = () => {
         
         // Get next page URL (null if no more pages)
         url = data.next
+        pageCount++
         
-        // Limit to first 1000 songs to avoid too many requests
-        if (likedIds.size >= 1000) break
+        // Small delay to avoid rate limiting
+        if (url) {
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
       }
       
-      console.log(`Fetched ${likedIds.size} liked songs from Spotify`)
+      console.log(`Fetched ${likedIds.size} liked songs from Spotify (${pageCount} pages)`)
     } catch (error) {
       console.error('Error fetching liked songs:', error)
+      // Return whatever we got so far
     }
     
     return likedIds
@@ -341,13 +350,23 @@ const MusicDiscovery = () => {
       setIsConnected(true)
       
       // Get initial recommendations
-      await getRecommendations(topArtists.items || [], token)
+      try {
+        await getRecommendations(topArtists.items || [], token)
+      } catch (recError) {
+        console.error('Error loading recommendations:', recError)
+        // Continue anyway - user can manually trigger recommendations
+      }
       
       setIsLoading(false)
     } catch (error) {
       console.error('Error fetching Spotify data:', error)
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      })
       setIsLoading(false)
-      alert('Error connecting to Spotify. Please try again.')
+      alert(`Error connecting to Spotify: ${error.message}\n\nPlease try reconnecting or refresh the page.`)
     }
   }
 
