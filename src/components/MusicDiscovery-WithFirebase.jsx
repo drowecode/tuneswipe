@@ -291,8 +291,8 @@ const MusicDiscovery = () => {
           setUserPreferences(savedPreferences)
         }
       } catch (error) {
-        console.error('Firebase error:', error)
-        // Continue without Firebase if there's an error
+        console.warn('Firebase unavailable - continuing without cloud sync:', error.message)
+        // Continue without Firebase - preferences will be local only
       }
 
       setIsConnected(true)
@@ -359,13 +359,40 @@ const MusicDiscovery = () => {
   }
 
   // Toggle play/pause
-  const togglePlayback = () => {
-    if (player) {
-      player.togglePlay().then(() => {
+  const togglePlayback = async () => {
+    if (!player || !playerReady) {
+      console.log('Player not ready')
+      // Fallback: open in Spotify
+      if (currentTrack) {
+        window.open(currentTrack.external_urls?.spotify || `https://open.spotify.com/track/${currentTrack.id}`, '_blank')
+      }
+      return
+    }
+
+    try {
+      // Check if we have a track loaded
+      const state = await player.getCurrentState()
+      
+      if (!state) {
+        // No track loaded, start playing the current track
+        console.log('No track loaded, starting playback...')
+        if (currentTrack?.uri) {
+          await playTrack(currentTrack.uri)
+        }
+      } else {
+        // Track is loaded, toggle play/pause
+        await player.togglePlay()
         console.log('Toggled playback')
-      }).catch(error => {
-        console.error('Error toggling playback:', error)
-      })
+      }
+    } catch (error) {
+      console.error('Error toggling playback:', error)
+      // If web player fails, offer to open in Spotify
+      if (currentTrack) {
+        const openSpotify = confirm('Web player unavailable. Open in Spotify app?')
+        if (openSpotify) {
+          window.open(currentTrack.external_urls?.spotify || `https://open.spotify.com/track/${currentTrack.id}`, '_blank')
+        }
+      }
     }
   }
 
@@ -540,15 +567,23 @@ const MusicDiscovery = () => {
     switch(reaction) {
       case 'love':
         newPreferences.loved = [...(newPreferences.loved || []), trackData]
-        // Save to Firebase
+        // Save to Firebase (silently fail if unavailable)
         if (userId) {
-          await savePreference(userId, trackData, 'loved')
+          try {
+            await savePreference(userId, trackData, 'loved')
+          } catch (error) {
+            console.warn('Could not save to Firebase:', error.message)
+          }
         }
         break
       case 'like':
         newPreferences.liked = [...(newPreferences.liked || []), trackData]
         if (userId) {
-          await savePreference(userId, trackData, 'liked')
+          try {
+            await savePreference(userId, trackData, 'liked')
+          } catch (error) {
+            console.warn('Could not save to Firebase:', error.message)
+          }
         }
         break
       case 'meh':
@@ -557,7 +592,11 @@ const MusicDiscovery = () => {
       case 'dislike':
         newPreferences.disliked = [...(newPreferences.disliked || []), trackData]
         if (userId) {
-          await savePreference(userId, trackData, 'disliked')
+          try {
+            await savePreference(userId, trackData, 'disliked')
+          } catch (error) {
+            console.warn('Could not save to Firebase:', error.message)
+          }
         }
         break
       default:
