@@ -356,59 +356,6 @@
   object-fit: cover;
 }
 
-/* Play Button Overlay */
-.play-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.album-art-left:hover .play-overlay {
-  opacity: 1;
-}
-
-.play-button-large {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: #1DB954;
-  border: none;
-  color: white;
-  font-size: 2rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-left: 4px;
-  transition: all 0.2s;
-  box-shadow: 0 8px 24px rgba(29, 185, 84, 0.5);
-}
-
-.play-button-large:hover:not(:disabled) {
-  transform: scale(1.1);
-  background: #1ed760;
-  box-shadow: 0 12px 32px rgba(29, 185, 84, 0.6);
-}
-
-.play-button-large:active:not(:disabled) {
-  transform: scale(0.95);
-}
-
-.play-button-large:disabled {
-  background: #282828;
-  color: #666;
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
 /* Playback Progress Section */
 .playback-progress-section {
   padding: 1.5rem 2rem;
@@ -416,12 +363,62 @@
   border-top: 1px solid #282828;
 }
 
+/* Playback Controls Row - Play button + Slider */
+.playback-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* Play/Pause Button */
+.play-button-control {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  border-radius: 50%;
+  background: #1DB954;
+  border: none;
+  color: white;
+  font-size: 1.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 3px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(29, 185, 84, 0.4);
+}
+
+.play-button-control:hover:not(:disabled) {
+  transform: scale(1.1);
+  background: #1ed760;
+  box-shadow: 0 6px 16px rgba(29, 185, 84, 0.5);
+}
+
+.play-button-control:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.play-button-control:disabled {
+  background: #282828;
+  color: #666;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Progress Container */
+.progress-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .progress-info {
   display: flex;
   justify-content: space-between;
   font-size: 0.75rem;
   color: #b3b3b3;
-  margin-bottom: 0.5rem;
   font-weight: 600;
 }
 
@@ -447,8 +444,8 @@
 
 .progress-slider::-webkit-slider-thumb {
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: #1DB954;
   cursor: pointer;
@@ -462,8 +459,8 @@
 }
 
 .progress-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: #1DB954;
   cursor: pointer;
@@ -1047,6 +1044,21 @@
 
   .greeting-header h1 {
     font-size: 2rem;
+  }
+
+  /* Stack play button and progress on mobile */
+  .playback-controls-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .play-button-control {
+    align-self: center;
+  }
+
+  .playback-progress-section {
+    padding: 1rem 1.5rem;
   }
 
   .reaction-buttons-bottom {

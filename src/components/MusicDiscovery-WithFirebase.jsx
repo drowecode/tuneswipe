@@ -726,7 +726,7 @@ const MusicDiscovery = () => {
             <div className="track-card-new">
               {/* Horizontal Layout: Photo Left, Info Right */}
               <div className="track-card-horizontal">
-                {/* Album Art - Left Side with Play Button Overlay */}
+                {/* Album Art - Left Side */}
                 <div className="album-art-left">
                   {currentTrack.album?.images && currentTrack.album.images[0] ? (
                     <img src={currentTrack.album.images[0].url} alt={currentTrack.name} className="album-image" />
@@ -735,17 +735,6 @@ const MusicDiscovery = () => {
                       <Music size={80} />
                     </div>
                   )}
-                  
-                  {/* Play Button Overlay */}
-                  <div className="play-overlay">
-                    <button 
-                      className="play-button-large"
-                      onClick={togglePlayback}
-                      disabled={!playerReady}
-                    >
-                      {isPlaying ? '⏸' : '▶'}
-                    </button>
-                  </div>
                 </div>
 
                 {/* Track Details - Right Side */}
@@ -773,22 +762,38 @@ const MusicDiscovery = () => {
                 </div>
               </div>
 
-              {/* Playback Progress Slider */}
+              {/* Playback Progress Slider with Controls */}
               <div className="playback-progress-section">
-                <div className="progress-info">
-                  <span className="time-current">{formatTime(currentPosition)}</span>
-                  <span className="time-total">{formatTime(trackDuration)}</span>
+                <div className="playback-controls-row">
+                  {/* Play/Pause Button */}
+                  <button 
+                    className="play-button-control"
+                    onClick={togglePlayback}
+                    disabled={!playerReady}
+                    title={isPlaying ? "Pause" : "Play"}
+                  >
+                    {isPlaying ? '⏸' : '▶'}
+                  </button>
+                  
+                  {/* Progress Slider and Time */}
+                  <div className="progress-container">
+                    <div className="progress-info">
+                      <span className="time-current">{formatTime(currentPosition)}</span>
+                      <span className="time-total">{formatTime(trackDuration)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max={trackDuration || 100}
+                      value={currentPosition}
+                      onChange={handleSeek}
+                      className="progress-slider"
+                      disabled={!playerReady || !isPlaying}
+                      title="Seek through track (Premium required)"
+                    />
+                  </div>
                 </div>
-                <input
-                  type="range"
-                  min="0"
-                  max={trackDuration || 100}
-                  value={currentPosition}
-                  onChange={handleSeek}
-                  className="progress-slider"
-                  disabled={!playerReady || !isPlaying}
-                  title="Seek through track (Premium required)"
-                />
+                
                 {!playerReady && (
                   <p className="playback-note">
                     Web playback requires Spotify Premium • Use "Open in Spotify" to listen
