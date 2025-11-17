@@ -21,8 +21,8 @@ const MusicDiscovery = () => {
   const [userStats, setUserStats] = useState(null)
   const [currentTrack, setCurrentTrack] = useState(null)
   const [recommendations, setRecommendations] = useState([])
+  const [likedSongIds, setLikedSongIds] = useState(new Set()) // Track Spotify liked song IDs
   const [userPreferences, setUserPreferences] = useState({
-    loved: [],
     liked: [],
     disliked: [],
     hated: []
@@ -197,6 +197,41 @@ const MusicDiscovery = () => {
     window.location.href = `${SPOTIFY_AUTH_ENDPOINT}?${params.toString()}`
   }
 
+  // Fetch all user's liked songs (with pagination)
+  const fetchAllLikedSongs = async (token) => {
+    const likedIds = new Set()
+    let url = 'https://api.spotify.com/v1/me/tracks?limit=50'
+    
+    try {
+      while (url) {
+        const response = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        
+        if (!response.ok) break
+        
+        const data = await response.json()
+        
+        // Add all track IDs to the set
+        data.items?.forEach(item => {
+          if (item.track?.id) {
+            likedIds.add(item.track.id)
+          }
+        })
+        
+        // Get next page URL (null if no more pages)
+        url = data.next
+        
+        // Limit to first 1000 songs to avoid too many requests
+        if (likedIds.size >= 1000) break
+      }
+    } catch (error) {
+      console.error('Error fetching liked songs:', error)
+    }
+    
+    return likedIds
+  }
+
   // Fetch Spotify user data
   const fetchSpotifyUserData = async (token) => {
     try {
@@ -229,6 +264,12 @@ const MusicDiscovery = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       const topTracks = await topTracksResponse.json()
+
+      // Get user's liked songs (to filter out from recommendations)
+      console.log('Fetching user liked songs...')
+      const likedSongs = await fetchAllLikedSongs(token)
+      console.log(`Found ${likedSongs.size} liked songs`)
+      setLikedSongIds(likedSongs)
 
       // Extract genres from top artists
       const genresMap = {}
@@ -389,10 +430,18 @@ const MusicDiscovery = () => {
           return
         }
         
-        // Just use the user's top tracks as recommendations
-        console.log('Using top tracks as recommendations:', tracks.length)
-        setRecommendations(tracks)
-        setCurrentTrack(tracks[0])
+        // Filter out already liked songs
+        const notLikedTopTracks = tracks.filter(track => !likedSongIds.has(track.id))
+        
+        if (notLikedTopTracks.length === 0) {
+          alert('All your top tracks are already liked! Great taste! Try listening to new music.')
+          return
+        }
+        
+        // Just use the user's top tracks (filtered) as recommendations
+        console.log('Using top tracks as recommendations:', notLikedTopTracks.length)
+        setRecommendations(notLikedTopTracks)
+        setCurrentTrack(notLikedTopTracks[0])
         return
       }
 
@@ -413,6 +462,17 @@ const MusicDiscovery = () => {
 
       console.log('Unique tracks:', uniqueTracks.length)
 
+      // Filter out songs user has already liked on Spotify
+      const notLikedTracks = uniqueTracks.filter(track => !likedSongIds.has(track.id))
+      
+      console.log(`Filtered out ${uniqueTracks.length - notLikedTracks.length} already-liked songs`)
+      console.log('Tracks after filtering:', notLikedTracks.length)
+
+      if (notLikedTracks.length === 0) {
+        alert('All tracks in your recent history are already liked! Listen to more new music on Spotify.')
+        return
+      }
+
       // Based on discovery mode, select tracks
       // Lower discovery = more recent/familiar
       // Higher discovery = more random/diverse
@@ -420,10 +480,10 @@ const MusicDiscovery = () => {
       
       if (discoveryMode < 50) {
         // Familiar mode - use most recent tracks
-        selectedTracks = uniqueTracks.slice(0, 20)
+        selectedTracks = notLikedTracks.slice(0, 20)
       } else {
         // Exploratory mode - shuffle and pick random ones
-        selectedTracks = uniqueTracks
+        selectedTracks = notLikedTracks
           .sort(() => 0.5 - Math.random())
           .slice(0, 20)
       }
@@ -465,6 +525,10 @@ const MusicDiscovery = () => {
           'Content-Type': 'application/json'
         }
       })
+      
+      // Add to local liked songs set to prevent showing it again
+      setLikedSongIds(prev => new Set([...prev, trackId]))
+      
       alert('Added to your Spotify Liked Songs! ✓')
     } catch (error) {
       console.error('Error adding to Spotify:', error)
@@ -493,13 +557,6 @@ const MusicDiscovery = () => {
     const newPreferences = { ...userPreferences }
     
     switch(reaction) {
-      case 'love':
-        newPreferences.loved = [...(newPreferences.loved || []), trackData]
-        // Save to Firebase
-        if (userId) {
-          await savePreference(userId, trackData, 'loved')
-        }
-        break
       case 'like':
         newPreferences.liked = [...(newPreferences.liked || []), trackData]
         if (userId) {
@@ -740,10 +797,6 @@ const MusicDiscovery = () => {
 
           {/* Preference Summary */}
           <div className="preference-summary">
-            <div className="pref-stat">
-              <Heart size={20} className="love-color" />
-              <span>{userPreferences.loved.length} loved</span>
-            </div>
             <div className="pref-stat">
               <ThumbsUp size={20} className="like-color" />
               <span>{userPreferences.liked.length} liked</span>
