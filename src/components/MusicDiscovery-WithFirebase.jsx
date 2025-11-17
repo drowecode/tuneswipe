@@ -220,6 +220,43 @@ const MusicDiscovery = () => {
     window.location.href = `${SPOTIFY_AUTH_ENDPOINT}?${params.toString()}`
   }
 
+  // Fetch all user's liked songs (with pagination)
+  const fetchAllLikedSongs = async (token) => {
+    const likedIds = new Set()
+    let url = 'https://api.spotify.com/v1/me/tracks?limit=50'
+    
+    try {
+      while (url) {
+        const response = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        
+        if (!response.ok) break
+        
+        const data = await response.json()
+        
+        // Add all track IDs to the set
+        data.items?.forEach(item => {
+          if (item.track?.id) {
+            likedIds.add(item.track.id)
+          }
+        })
+        
+        // Get next page URL (null if no more pages)
+        url = data.next
+        
+        // Limit to first 1000 songs to avoid too many requests
+        if (likedIds.size >= 1000) break
+      }
+      
+      console.log(`Fetched ${likedIds.size} liked songs from Spotify`)
+    } catch (error) {
+      console.error('Error fetching liked songs:', error)
+    }
+    
+    return likedIds
+  }
+
   // Fetch Spotify user data
   const fetchSpotifyUserData = async (token) => {
     try {
@@ -252,6 +289,12 @@ const MusicDiscovery = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       const topTracks = await topTracksResponse.json()
+
+      // Get user's liked songs (to filter out from recommendations)
+      console.log('Fetching user liked songs...')
+      const likedSongs = await fetchAllLikedSongs(token)
+      console.log(`Found ${likedSongs.size} liked songs`)
+      setLikedSongIds(likedSongs)
 
       // Extract genres from top artists
       const genresMap = {}
@@ -461,10 +504,20 @@ const MusicDiscovery = () => {
           return
         }
         
-        // Just use the user's top tracks as recommendations
-        console.log('Using top tracks as recommendations:', tracks.length)
-        setRecommendations(tracks)
-        setCurrentTrack(tracks[0])
+        // Filter out already liked songs from top tracks
+        const notLikedTopTracks = tracks.filter(track => !likedSongIds.has(track.id))
+        
+        console.log(`Top tracks: ${tracks.length}, After filtering liked: ${notLikedTopTracks.length}`)
+        
+        if (notLikedTopTracks.length === 0) {
+          alert('All your top tracks are already liked! Great taste! Try listening to new music.')
+          return
+        }
+        
+        // Use the user's top tracks (filtered) as recommendations
+        console.log('Using filtered top tracks as recommendations:', notLikedTopTracks.length)
+        setRecommendations(notLikedTopTracks)
+        setCurrentTrack(notLikedTopTracks[0])
         return
       }
 
@@ -484,6 +537,24 @@ const MusicDiscovery = () => {
       )
 
       console.log('Unique tracks:', uniqueTracks.length)
+      console.log('Liked songs to filter:', likedSongIds.size)
+
+      // Filter out songs user has already liked on Spotify
+      const notLikedTracks = uniqueTracks.filter(track => {
+        const isLiked = likedSongIds.has(track.id)
+        if (isLiked) {
+          console.log('Filtering out liked song:', track.name)
+        }
+        return !isLiked
+      })
+      
+      console.log(`Filtered out ${uniqueTracks.length - notLikedTracks.length} already-liked songs`)
+      console.log('Tracks after filtering:', notLikedTracks.length)
+
+      if (notLikedTracks.length === 0) {
+        alert('All tracks in your recent history are already liked! Listen to more new music on Spotify.')
+        return
+      }
 
       // Based on discovery mode, select tracks
       // Lower discovery = more recent/familiar
@@ -492,10 +563,10 @@ const MusicDiscovery = () => {
       
       if (discoveryMode < 50) {
         // Familiar mode - use most recent tracks
-        selectedTracks = uniqueTracks.slice(0, 20)
+        selectedTracks = notLikedTracks.slice(0, 20)
       } else {
         // Exploratory mode - shuffle and pick random ones
-        selectedTracks = uniqueTracks
+        selectedTracks = notLikedTracks
           .sort(() => 0.5 - Math.random())
           .slice(0, 20)
       }
