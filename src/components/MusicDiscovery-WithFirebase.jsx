@@ -16,6 +16,8 @@ const MusicDiscovery = () => {
   const [deviceId, setDeviceId] = useState(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playerReady, setPlayerReady] = useState(false)
+  const [currentPosition, setCurrentPosition] = useState(0) // Current playback position in ms
+  const [trackDuration, setTrackDuration] = useState(0) // Track duration in ms
   
   // User data
   const [userStats, setUserStats] = useState(null)
@@ -114,6 +116,8 @@ const MusicDiscovery = () => {
       newPlayer.addListener('player_state_changed', state => {
         if (!state) return
         setIsPlaying(!state.paused)
+        setCurrentPosition(state.position)
+        setTrackDuration(state.duration)
       })
 
       newPlayer.connect().then(success => {
@@ -131,6 +135,25 @@ const MusicDiscovery = () => {
       }
     }
   }, [spotifyToken])
+
+  // Poll player state for smooth progress updates
+  useEffect(() => {
+    if (!player || !isPlaying) return
+
+    const interval = setInterval(async () => {
+      try {
+        const state = await player.getCurrentState()
+        if (state) {
+          setCurrentPosition(state.position)
+          setTrackDuration(state.duration)
+        }
+      } catch (error) {
+        console.error('Error getting player state:', error)
+      }
+    }, 1000) // Update every second
+
+    return () => clearInterval(interval)
+  }, [player, isPlaying])
 
   // Exchange authorization code for access token
   const exchangeCodeForToken = async (code) => {
@@ -343,6 +366,28 @@ const MusicDiscovery = () => {
       }).catch(error => {
         console.error('Error toggling playback:', error)
       })
+    }
+  }
+
+  // Format time from milliseconds to MM:SS
+  const formatTime = (ms) => {
+    if (!ms || ms === 0) return '0:00'
+    const totalSeconds = Math.floor(ms / 1000)
+    const minutes = Math.floor(totalSeconds / 60)
+    const seconds = totalSeconds % 60
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  }
+
+  // Handle seeking through track
+  const handleSeek = async (event) => {
+    if (!player || !playerReady) return
+    
+    const seekPosition = parseInt(event.target.value)
+    try {
+      await player.seek(seekPosition)
+      setCurrentPosition(seekPosition)
+    } catch (error) {
+      console.error('Error seeking:', error)
     }
   }
 
@@ -681,7 +726,7 @@ const MusicDiscovery = () => {
             <div className="track-card-new">
               {/* Horizontal Layout: Photo Left, Info Right */}
               <div className="track-card-horizontal">
-                {/* Album Art - Left Side */}
+                {/* Album Art - Left Side with Play Button Overlay */}
                 <div className="album-art-left">
                   {currentTrack.album?.images && currentTrack.album.images[0] ? (
                     <img src={currentTrack.album.images[0].url} alt={currentTrack.name} className="album-image" />
@@ -690,6 +735,17 @@ const MusicDiscovery = () => {
                       <Music size={80} />
                     </div>
                   )}
+                  
+                  {/* Play Button Overlay */}
+                  <div className="play-overlay">
+                    <button 
+                      className="play-button-large"
+                      onClick={togglePlayback}
+                      disabled={!playerReady}
+                    >
+                      {isPlaying ? '⏸' : '▶'}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Track Details - Right Side */}
@@ -715,6 +771,29 @@ const MusicDiscovery = () => {
                     🎵 Open in Spotify
                   </button>
                 </div>
+              </div>
+
+              {/* Playback Progress Slider */}
+              <div className="playback-progress-section">
+                <div className="progress-info">
+                  <span className="time-current">{formatTime(currentPosition)}</span>
+                  <span className="time-total">{formatTime(trackDuration)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max={trackDuration || 100}
+                  value={currentPosition}
+                  onChange={handleSeek}
+                  className="progress-slider"
+                  disabled={!playerReady || !isPlaying}
+                  title="Seek through track (Premium required)"
+                />
+                {!playerReady && (
+                  <p className="playback-note">
+                    Web playback requires Spotify Premium • Use "Open in Spotify" to listen
+                  </p>
+                )}
               </div>
 
               {/* Large Reaction Buttons - Bottom */}
