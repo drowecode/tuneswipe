@@ -321,7 +321,7 @@
   margin-top: 0.5rem;
 }
 
-/* New Track Card Layout */
+/* New Track Card Layout - Horizontal */
 .track-card-new {
   background: #181818;
   border-radius: 1.5rem;
@@ -330,9 +330,18 @@
   border: 1px solid #282828;
 }
 
-.album-art-section {
-  width: 100%;
-  aspect-ratio: 1;
+/* Horizontal Layout Container */
+.track-card-horizontal {
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  gap: 0;
+  min-height: 350px;
+}
+
+/* Album Art - Left Side */
+.album-art-left {
+  width: 350px;
+  height: 350px;
   background: #000000;
   display: flex;
   align-items: center;
@@ -346,63 +355,62 @@
   object-fit: cover;
 }
 
-.track-details {
-  padding: 2rem 2rem 1.5rem 2rem;
-  text-align: center;
+/* Track Details - Right Side */
+.track-details-right {
+  padding: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
 }
 
 .song-title {
-  font-size: 2rem;
+  font-size: 2.5rem;
   font-weight: 800;
   color: white;
-  margin: 0 0 0.5rem 0;
+  margin: 0;
   line-height: 1.2;
 }
 
 .artist-name {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   color: #1DB954;
   font-weight: 600;
-  margin: 0 0 0.5rem 0;
+  margin: 0;
 }
 
 .album-name {
-  font-size: 1rem;
+  font-size: 1.125rem;
   color: #b3b3b3;
-  margin: 0 0 1rem 0;
+  margin: 0;
 }
 
-.track-stats-row {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.stat-item {
+.popularity-stat {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.875rem;
+  font-size: 1rem;
   color: #b3b3b3;
-  padding: 0.5rem 1rem;
-  background: #000000;
-  border-radius: 1.5rem;
-  border: 1px solid #282828;
+  margin-top: 0.5rem;
+}
+
+.popularity-stat svg {
+  color: #1DB954;
 }
 
 .spotify-link-btn {
-  padding: 0.625rem 1.25rem;
+  padding: 0.875rem 1.5rem;
   background: #1DB954;
   color: white;
   border: none;
-  border-radius: 1.5rem;
+  border-radius: 2rem;
   font-weight: 700;
-  font-size: 0.875rem;
+  font-size: 1rem;
   cursor: pointer;
   transition: all 0.2s;
   box-shadow: 0 4px 12px rgba(29, 185, 84, 0.3);
+  margin-top: 1rem;
+  align-self: flex-start;
 }
 
 .spotify-link-btn:hover {
@@ -863,13 +871,51 @@
     padding: 1rem;
   }
 
-  .reaction-buttons {
-    gap: 0.5rem;
+  /* Make track card vertical on mobile */
+  .track-card-horizontal {
+    grid-template-columns: 1fr;
+    min-height: auto;
   }
 
-  .reaction-btn {
-    width: 56px;
-    height: 56px;
+  .album-art-left {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+
+  .track-details-right {
+    padding: 1.5rem;
+  }
+
+  .song-title {
+    font-size: 1.75rem;
+  }
+
+  .artist-name {
+    font-size: 1.25rem;
+  }
+
+  .album-name {
+    font-size: 1rem;
+  }
+
+  .greeting-header h1 {
+    font-size: 2rem;
+  }
+
+  .reaction-buttons-bottom {
+    gap: 2rem;
+    padding: 2rem;
+  }
+
+  .reaction-btn-xlarge {
+    width: 80px;
+    height: 80px;
+  }
+
+  .reaction-btn-xlarge svg {
+    width: 40px;
+    height: 40px;
   }
 
   .preference-summary {

@@ -679,31 +679,34 @@ const MusicDiscovery = () => {
           {/* Current Track Card */}
           {currentTrack ? (
             <div className="track-card-new">
-              {/* Album Art */}
-              <div className="album-art-section">
-                {currentTrack.album?.images && currentTrack.album.images[0] ? (
-                  <img src={currentTrack.album.images[0].url} alt={currentTrack.name} className="album-image" />
-                ) : (
-                  <div className="placeholder-image">
-                    <Music size={80} />
-                  </div>
-                )}
-              </div>
-
-              {/* Track Details */}
-              <div className="track-details">
-                <h2 className="song-title">{currentTrack.name}</h2>
-                <h3 className="artist-name">{currentTrack.artists ? currentTrack.artists.map(a => a.name).join(', ') : ''}</h3>
-                <p className="album-name">{currentTrack.album?.name}</p>
-                
-                {/* Stats Row */}
-                <div className="track-stats-row">
-                  {currentTrack.popularity && (
-                    <span className="stat-item">
-                      <TrendingUp size={16} />
-                      {currentTrack.popularity}/100
-                    </span>
+              {/* Horizontal Layout: Photo Left, Info Right */}
+              <div className="track-card-horizontal">
+                {/* Album Art - Left Side */}
+                <div className="album-art-left">
+                  {currentTrack.album?.images && currentTrack.album.images[0] ? (
+                    <img src={currentTrack.album.images[0].url} alt={currentTrack.name} className="album-image" />
+                  ) : (
+                    <div className="placeholder-image">
+                      <Music size={80} />
+                    </div>
                   )}
+                </div>
+
+                {/* Track Details - Right Side */}
+                <div className="track-details-right">
+                  <h2 className="song-title">{currentTrack.name}</h2>
+                  <h3 className="artist-name">{currentTrack.artists ? currentTrack.artists.map(a => a.name).join(', ') : ''}</h3>
+                  <p className="album-name">{currentTrack.album?.name}</p>
+                  
+                  {/* Stats */}
+                  {currentTrack.popularity && (
+                    <div className="popularity-stat">
+                      <TrendingUp size={18} />
+                      <span>{currentTrack.popularity}/100</span>
+                    </div>
+                  )}
+                  
+                  {/* Open in Spotify Link */}
                   <button
                     className="spotify-link-btn"
                     onClick={() => window.open(currentTrack.external_urls?.spotify || `https://open.spotify.com/track/${currentTrack.id}`, '_blank')}
@@ -714,7 +717,7 @@ const MusicDiscovery = () => {
                 </div>
               </div>
 
-              {/* Large Reaction Buttons */}
+              {/* Large Reaction Buttons - Bottom */}
               <div className="reaction-buttons-bottom">
                 <button 
                   className="reaction-btn-xlarge dislike-btn-xlarge"
