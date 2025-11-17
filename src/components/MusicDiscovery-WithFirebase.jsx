@@ -23,6 +23,7 @@ const MusicDiscovery = () => {
   const [userStats, setUserStats] = useState(null)
   const [currentTrack, setCurrentTrack] = useState(null)
   const [recommendations, setRecommendations] = useState([])
+  const [likedSongIds, setLikedSongIds] = useState(new Set()) // Track Spotify liked song IDs
   const [userPreferences, setUserPreferences] = useState({
     loved: [],
     liked: [],
