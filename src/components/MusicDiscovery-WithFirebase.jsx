@@ -21,8 +21,8 @@ const MusicDiscovery = () => {
   const [userStats, setUserStats] = useState(null)
   const [currentTrack, setCurrentTrack] = useState(null)
   const [recommendations, setRecommendations] = useState([])
-  const [likedSongIds, setLikedSongIds] = useState(new Set()) // Track Spotify liked song IDs
   const [userPreferences, setUserPreferences] = useState({
+    loved: [],
     liked: [],
     disliked: [],
     hated: []
@@ -197,41 +197,6 @@ const MusicDiscovery = () => {
     window.location.href = `${SPOTIFY_AUTH_ENDPOINT}?${params.toString()}`
   }
 
-  // Fetch all user's liked songs (with pagination)
-  const fetchAllLikedSongs = async (token) => {
-    const likedIds = new Set()
-    let url = 'https://api.spotify.com/v1/me/tracks?limit=50'
-    
-    try {
-      while (url) {
-        const response = await fetch(url, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-        
-        if (!response.ok) break
-        
-        const data = await response.json()
-        
-        // Add all track IDs to the set
-        data.items?.forEach(item => {
-          if (item.track?.id) {
-            likedIds.add(item.track.id)
-          }
-        })
-        
-        // Get next page URL (null if no more pages)
-        url = data.next
-        
-        // Limit to first 1000 songs to avoid too many requests
-        if (likedIds.size >= 1000) break
-      }
-    } catch (error) {
-      console.error('Error fetching liked songs:', error)
-    }
-    
-    return likedIds
-  }
-
   // Fetch Spotify user data
   const fetchSpotifyUserData = async (token) => {
     try {
@@ -264,12 +229,6 @@ const MusicDiscovery = () => {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       const topTracks = await topTracksResponse.json()
-
-      // Get user's liked songs (to filter out from recommendations)
-      console.log('Fetching user liked songs...')
-      const likedSongs = await fetchAllLikedSongs(token)
-      console.log(`Found ${likedSongs.size} liked songs`)
-      setLikedSongIds(likedSongs)
 
       // Extract genres from top artists
       const genresMap = {}
@@ -430,18 +389,10 @@ const MusicDiscovery = () => {
           return
         }
         
-        // Filter out already liked songs
-        const notLikedTopTracks = tracks.filter(track => !likedSongIds.has(track.id))
-        
-        if (notLikedTopTracks.length === 0) {
-          alert('All your top tracks are already liked! Great taste! Try listening to new music.')
-          return
-        }
-        
-        // Just use the user's top tracks (filtered) as recommendations
-        console.log('Using top tracks as recommendations:', notLikedTopTracks.length)
-        setRecommendations(notLikedTopTracks)
-        setCurrentTrack(notLikedTopTracks[0])
+        // Just use the user's top tracks as recommendations
+        console.log('Using top tracks as recommendations:', tracks.length)
+        setRecommendations(tracks)
+        setCurrentTrack(tracks[0])
         return
       }
 
@@ -462,17 +413,6 @@ const MusicDiscovery = () => {
 
       console.log('Unique tracks:', uniqueTracks.length)
 
-      // Filter out songs user has already liked on Spotify
-      const notLikedTracks = uniqueTracks.filter(track => !likedSongIds.has(track.id))
-      
-      console.log(`Filtered out ${uniqueTracks.length - notLikedTracks.length} already-liked songs`)
-      console.log('Tracks after filtering:', notLikedTracks.length)
-
-      if (notLikedTracks.length === 0) {
-        alert('All tracks in your recent history are already liked! Listen to more new music on Spotify.')
-        return
-      }
-
       // Based on discovery mode, select tracks
       // Lower discovery = more recent/familiar
       // Higher discovery = more random/diverse
@@ -480,10 +420,10 @@ const MusicDiscovery = () => {
       
       if (discoveryMode < 50) {
         // Familiar mode - use most recent tracks
-        selectedTracks = notLikedTracks.slice(0, 20)
+        selectedTracks = uniqueTracks.slice(0, 20)
       } else {
         // Exploratory mode - shuffle and pick random ones
-        selectedTracks = notLikedTracks
+        selectedTracks = uniqueTracks
           .sort(() => 0.5 - Math.random())
           .slice(0, 20)
       }
@@ -525,10 +465,6 @@ const MusicDiscovery = () => {
           'Content-Type': 'application/json'
         }
       })
-      
-      // Add to local liked songs set to prevent showing it again
-      setLikedSongIds(prev => new Set([...prev, trackId]))
-      
       alert('Added to your Spotify Liked Songs! ✓')
     } catch (error) {
       console.error('Error adding to Spotify:', error)
@@ -557,6 +493,13 @@ const MusicDiscovery = () => {
     const newPreferences = { ...userPreferences }
     
     switch(reaction) {
+      case 'love':
+        newPreferences.loved = [...(newPreferences.loved || []), trackData]
+        // Save to Firebase
+        if (userId) {
+          await savePreference(userId, trackData, 'loved')
+        }
+        break
       case 'like':
         newPreferences.liked = [...(newPreferences.liked || []), trackData]
         if (userId) {
@@ -650,6 +593,28 @@ const MusicDiscovery = () => {
     )
   }
 
+  // Get greeting based on time of day
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'good morning'
+    if (hour < 18) return 'good afternoon'
+    return 'good evening'
+  }
+
+  // Get discovery message based on time
+  const getDiscoveryMessage = () => {
+    const hour = new Date().getHours()
+    if (hour >= 5 && hour < 12) {
+      return 'Discovery based on your morning vibes'
+    } else if (hour >= 12 && hour < 17) {
+      return 'Discovery based on your afternoon mood'
+    } else if (hour >= 17 && hour < 21) {
+      return 'Discovery based on your evening energy'
+    } else {
+      return 'Discovery based on your late night feels'
+    }
+  }
+
   // Main app view
   return (
     <div className="app-container">
@@ -686,15 +651,18 @@ const MusicDiscovery = () => {
       {/* Discovery View */}
       {currentView === 'discover' && (
         <div className="discover-view">
+          {/* Greeting Header */}
+          <div className="greeting-header">
+            <h1>{getGreeting()}</h1>
+            <p className="discovery-message">{getDiscoveryMessage()}</p>
+          </div>
+
           {/* Discovery Mode Slider */}
           <div className="discovery-controls">
             <div className="slider-container">
-              <label>
-                <Sliders size={20} />
-                Discovery Mode
-              </label>
               <div className="slider-labels">
                 <span>Familiar</span>
+                <span className="slider-percentage">{discoveryMode}% exploratory</span>
                 <span>Exploratory</span>
               </div>
               <input
@@ -705,86 +673,63 @@ const MusicDiscovery = () => {
                 onChange={(e) => setDiscoveryMode(Number(e.target.value))}
                 className="discovery-slider"
               />
-              <div className="slider-value">{discoveryMode}% exploratory</div>
             </div>
           </div>
 
           {/* Current Track Card */}
           {currentTrack ? (
-            <div className="track-card">
-              <div className="track-image">
+            <div className="track-card-new">
+              {/* Album Art */}
+              <div className="album-art-section">
                 {currentTrack.album?.images && currentTrack.album.images[0] ? (
-                  <img src={currentTrack.album.images[0].url} alt={currentTrack.name} />
+                  <img src={currentTrack.album.images[0].url} alt={currentTrack.name} className="album-image" />
                 ) : (
                   <div className="placeholder-image">
-                    <Music size={64} />
+                    <Music size={80} />
                   </div>
                 )}
               </div>
-              <div className="track-info">
-                <h2>{currentTrack.name}</h2>
-                <h3>{currentTrack.artists ? currentTrack.artists.map(a => a.name).join(', ') : ''}</h3>
-                {currentTrack.album && (
-                  <p className="track-album">{currentTrack.album.name}</p>
-                )}
-                {currentTrack.popularity && (
-                  <p className="track-stats">Popularity: {currentTrack.popularity}/100</p>
-                )}
-                
-                {/* Add to Spotify Liked Button */}
-                <button 
-                  className="add-to-liked-btn"
-                  onClick={() => addToSpotifyLiked(currentTrack.uri)}
-                  title="Add to Spotify Liked Songs"
-                >
-                  <Plus size={20} />
-                  Add to Liked Songs
-                </button>
-              </div>
 
-              {/* Web Player Controls */}
-              <div className="playback-controls">
-                <button 
-                  className="playback-btn"
-                  onClick={togglePlayback}
-                  title={isPlaying ? "Pause" : "Play"}
-                  disabled={!playerReady}
-                >
-                  {isPlaying ? '⏸' : '▶'}
-                </button>
+              {/* Track Details */}
+              <div className="track-details">
+                <h2 className="song-title">{currentTrack.name}</h2>
+                <h3 className="artist-name">{currentTrack.artists ? currentTrack.artists.map(a => a.name).join(', ') : ''}</h3>
+                <p className="album-name">{currentTrack.album?.name}</p>
                 
-                <button
-                  className="spotify-open-btn"
-                  onClick={() => window.open(currentTrack.external_urls?.spotify || `https://open.spotify.com/track/${currentTrack.id}`, '_blank')}
-                  title="Open in Spotify"
-                >
-                  🎵 Open in Spotify
-                </button>
-              </div>
-              
-              {!playerReady && (
-                <div className="player-info">
-                  <span className="player-status">Connecting player...</span>
-                  <span className="player-note">Note: Web playback requires Spotify Premium</span>
+                {/* Stats Row */}
+                <div className="track-stats-row">
+                  {currentTrack.popularity && (
+                    <span className="stat-item">
+                      <TrendingUp size={16} />
+                      {currentTrack.popularity}/100
+                    </span>
+                  )}
+                  <button
+                    className="spotify-link-btn"
+                    onClick={() => window.open(currentTrack.external_urls?.spotify || `https://open.spotify.com/track/${currentTrack.id}`, '_blank')}
+                    title="Open in Spotify"
+                  >
+                    🎵 Open in Spotify
+                  </button>
                 </div>
-              )}
+              </div>
 
-              {/* Simplified Reaction Buttons - X and Check */}
-              <div className="reaction-buttons-simple">
+              {/* Large Reaction Buttons */}
+              <div className="reaction-buttons-bottom">
                 <button 
-                  className="reaction-btn-large dislike-btn-large"
+                  className="reaction-btn-xlarge dislike-btn-xlarge"
                   onClick={() => handleReaction('dislike')}
-                  title="Dislike - Skip this song"
+                  title="Skip"
                 >
-                  <X size={40} strokeWidth={3} />
+                  <X size={50} strokeWidth={3} />
                 </button>
                 
                 <button 
-                  className="reaction-btn-large like-btn-large"
+                  className="reaction-btn-xlarge like-btn-xlarge"
                   onClick={() => handleReaction('like', true)}
-                  title="Like - Add to Spotify & Continue"
+                  title="Like & Save"
                 >
-                  <Check size={40} strokeWidth={3} />
+                  <Check size={50} strokeWidth={3} />
                 </button>
               </div>
             </div>
@@ -797,6 +742,10 @@ const MusicDiscovery = () => {
 
           {/* Preference Summary */}
           <div className="preference-summary">
+            <div className="pref-stat">
+              <Heart size={20} className="love-color" />
+              <span>{userPreferences.loved.length} loved</span>
+            </div>
             <div className="pref-stat">
               <ThumbsUp size={20} className="like-color" />
               <span>{userPreferences.liked.length} liked</span>
