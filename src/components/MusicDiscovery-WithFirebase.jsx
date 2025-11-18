@@ -557,19 +557,25 @@ const MusicDiscovery = () => {
       )
 
       console.log('Unique tracks:', uniqueTracks.length)
-      console.log('Liked songs to filter:', likedSongIds.size)
+      console.log('Liked songs Set size:', likedSongIds.size)
+      console.log('First 5 liked song IDs:', Array.from(likedSongIds).slice(0, 5))
+      console.log('First 5 unique track IDs:', uniqueTracks.slice(0, 5).map(t => ({ id: t.id, name: t.name })))
 
       // Filter out songs user has already liked on Spotify
       const notLikedTracks = uniqueTracks.filter(track => {
         const isLiked = likedSongIds.has(track.id)
         if (isLiked) {
-          console.log('Filtering out liked song:', track.name)
+          console.log('✓ Filtering out liked song:', track.name, 'ID:', track.id)
         }
         return !isLiked
       })
       
       console.log(`Filtered out ${uniqueTracks.length - notLikedTracks.length} already-liked songs`)
       console.log('Tracks after filtering:', notLikedTracks.length)
+      
+      if (notLikedTracks.length > 0) {
+        console.log('Sample tracks passing filter:', notLikedTracks.slice(0, 3).map(t => ({ id: t.id, name: t.name, isLiked: likedSongIds.has(t.id) })))
+      }
 
       if (notLikedTracks.length === 0) {
         alert('All tracks in your recent history are already liked! Listen to more new music on Spotify.')
@@ -577,21 +583,46 @@ const MusicDiscovery = () => {
       }
 
       // Based on discovery mode, select tracks
-      // Lower discovery = more recent/familiar
-      // Higher discovery = more random/diverse
+      // 0 = Most recent/familiar songs
+      // 50 = Mix of recent and random
+      // 100 = Completely random/exploratory
       let selectedTracks = []
       
-      if (discoveryMode < 50) {
-        // Familiar mode - use most recent tracks
-        selectedTracks = notLikedTracks.slice(0, 20)
-      } else {
-        // Exploratory mode - shuffle and pick random ones
-        selectedTracks = notLikedTracks
-          .sort(() => 0.5 - Math.random())
+      const availableTracks = [...notLikedTracks] // Make a copy
+      
+      if (discoveryMode === 0) {
+        // 0% exploratory - just most recent
+        selectedTracks = availableTracks.slice(0, 20)
+        console.log('Discovery mode: 0% - Using most recent tracks')
+      } else if (discoveryMode === 100) {
+        // 100% exploratory - completely random
+        selectedTracks = availableTracks
+          .sort(() => Math.random() - 0.5)
           .slice(0, 20)
+        console.log('Discovery mode: 100% - Completely randomized')
+      } else {
+        // Mixed mode - blend recent and random based on percentage
+        const numRecent = Math.floor(20 * (1 - discoveryMode / 100))
+        const numRandom = 20 - numRecent
+        
+        console.log(`Discovery mode: ${discoveryMode}% - ${numRecent} recent + ${numRandom} random`)
+        
+        // Take some recent tracks
+        const recentPicks = availableTracks.slice(0, numRecent)
+        
+        // Take some random tracks (excluding the ones we already picked)
+        const remainingTracks = availableTracks.slice(numRecent)
+        const randomPicks = remainingTracks
+          .sort(() => Math.random() - 0.5)
+          .slice(0, numRandom)
+        
+        // Combine and shuffle
+        selectedTracks = [...recentPicks, ...randomPicks]
+          .sort(() => Math.random() - 0.5)
       }
 
       console.log('Selected tracks for recommendations:', selectedTracks.length)
+      console.log('Discovery mode result:', selectedTracks.slice(0, 3).map(t => t.name))
 
       if (selectedTracks.length > 0) {
         setRecommendations(selectedTracks)
@@ -719,12 +750,18 @@ const MusicDiscovery = () => {
     }
   }
 
-  // Update recommendations when discovery mode changes
+  // Update recommendations when discovery mode changes (with debounce)
   useEffect(() => {
     if (isConnected && userStats?.topArtists && spotifyToken) {
-      getRecommendations(userStats.topArtists, spotifyToken)
+      console.log('Discovery mode changed to:', discoveryMode)
+      const timeoutId = setTimeout(() => {
+        console.log('Fetching new recommendations for discovery mode:', discoveryMode)
+        getRecommendations(userStats.topArtists, spotifyToken)
+      }, 500) // Wait 500ms after user stops dragging slider
+      
+      return () => clearTimeout(timeoutId)
     }
-  }, [discoveryMode])
+  }, [discoveryMode, isConnected, userStats, spotifyToken])
 
   // Login view
   if (!isConnected) {
