@@ -1,0 +1,7 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="32" fill="#000000"/>
+  
+  <!-- Music note icon in Spotify green -->
+  <path d="M42 18V40C42 42.2091 40.2091 44 38 44C35.7909 44 34 42.2091 34 40C34 37.7909 35.7909 36 38 36C39.1046 36 40 36.8954 40 38V22L26 26V46C26 48.2091 24.2091 50 22 50C19.7909 50 18 48.2091 18 46C18 43.7909 19.7909 42 22 42C23.1046 42 24 42.8954 24 44V24L42 18Z" fill="#1DB954" stroke="#1DB954" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
