@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Heart, ThumbsUp, Meh, ThumbsDown, TrendingUp, Music, User, BarChart3, Sliders, Plus, Check, X } from 'lucide-react'
+import { Heart, ThumbsUp, Meh, ThumbsDown, TrendingUp, Music, User, BarChart3, Sliders, Plus, Check, X, ChevronDown, ChevronUp } from 'lucide-react'
 import './MusicDiscovery.css'
 import { createUserProfile, savePreference, getUserPreferences, onAuthChange } from './firebase'
 
@@ -11,6 +11,7 @@ const MusicDiscovery = () => {
   const [discoveryMode, setDiscoveryMode] = useState(50) // 0-100, 0=familiar, 100=exploratory
   const [selectedGenres, setSelectedGenres] = useState(['all']) // Selected genre filters
   const [showGenreFilter, setShowGenreFilter] = useState(false) // Show/hide genre dropdown
+  const [filtersCollapsed, setFiltersCollapsed] = useState(false) // Collapse entire filters section
   const [isLoading, setIsLoading] = useState(false)
   
   // Spotify Web Player
@@ -32,6 +33,9 @@ const MusicDiscovery = () => {
     disliked: [],
     hated: []
   })
+  
+  // Store artist genres for better filtering
+  const [artistGenresMap, setArtistGenresMap] = useState(new Map())
 
   // Spotify API config
   const SPOTIFY_CLIENT_ID = '317c65a797af484fb3e2af110acdfd72' // Your client ID
@@ -267,6 +271,43 @@ const MusicDiscovery = () => {
     }
     
     return likedIds
+  }
+
+  // Fetch artist genres for better filtering
+  const fetchArtistGenres = async (artistIds, token) => {
+    const genresMap = new Map()
+    
+    // Fetch in batches of 50 (Spotify API limit)
+    const batchSize = 50
+    for (let i = 0; i < artistIds.length; i += batchSize) {
+      const batch = artistIds.slice(i, i + batchSize)
+      try {
+        const response = await fetch(
+          `https://api.spotify.com/v1/artists?ids=${batch.join(',')}`,
+          {
+            headers: { 'Authorization': `Bearer ${token}` }
+          }
+        )
+        
+        if (response.ok) {
+          const data = await response.json()
+          data.artists?.forEach(artist => {
+            if (artist && artist.id && artist.genres) {
+              genresMap.set(artist.id, artist.genres)
+            }
+          })
+        }
+        
+        // Small delay to avoid rate limiting
+        if (i + batchSize < artistIds.length) {
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
+      } catch (error) {
+        console.error('Error fetching artist genres:', error)
+      }
+    }
+    
+    return genresMap
   }
 
   // Fetch Spotify user data
@@ -536,10 +577,26 @@ const MusicDiscovery = () => {
           return
         }
         
+        // Fetch artist genres for better filtering
+        const allArtistIds = [...new Set(notLikedTopTracks.flatMap(track => 
+          track.artists?.map(a => a.id) || []
+        ))]
+        console.log('Fetching genres for', allArtistIds.length, 'artists...')
+        const genresMap = await fetchArtistGenres(allArtistIds, token)
+        setArtistGenresMap(genresMap)
+        
+        // Apply genre filter
+        const genreFilteredTracks = filterTracksByGenre(notLikedTopTracks, genresMap)
+        
+        if (genreFilteredTracks.length === 0) {
+          alert('No tracks match your selected genres. Try selecting different genres or choose "All".')
+          return
+        }
+        
         // Use the user's top tracks (filtered) as recommendations
-        console.log('Using filtered top tracks as recommendations:', notLikedTopTracks.length)
-        setRecommendations(notLikedTopTracks)
-        setCurrentTrack(notLikedTopTracks[0])
+        console.log('Using filtered top tracks as recommendations:', genreFilteredTracks.length)
+        setRecommendations(genreFilteredTracks)
+        setCurrentTrack(genreFilteredTracks[0])
         return
       }
 
@@ -560,8 +617,6 @@ const MusicDiscovery = () => {
 
       console.log('Unique tracks:', uniqueTracks.length)
       console.log('Liked songs Set size:', likedSongIds.size)
-      console.log('First 5 liked song IDs:', Array.from(likedSongIds).slice(0, 5))
-      console.log('First 5 unique track IDs:', uniqueTracks.slice(0, 5).map(t => ({ id: t.id, name: t.name })))
 
       // Filter out songs user has already liked on Spotify
       const notLikedTracks = uniqueTracks.filter(track => {
@@ -573,18 +628,18 @@ const MusicDiscovery = () => {
       })
       
       console.log(`Filtered out ${uniqueTracks.length - notLikedTracks.length} already-liked songs`)
-      console.log('Tracks after filtering:', notLikedTracks.length)
+      console.log('Tracks after filtering liked songs:', notLikedTracks.length)
+      
+      // Fetch artist genres for better filtering
+      const allArtistIds = [...new Set(notLikedTracks.flatMap(track => 
+        track.artists?.map(a => a.id) || []
+      ))]
+      console.log('Fetching genres for', allArtistIds.length, 'artists...')
+      const genresMap = await fetchArtistGenres(allArtistIds, token)
+      setArtistGenresMap(genresMap)
       
       // Apply genre filter
-      const genreFilteredTracks = selectedGenres.includes('all') 
-        ? notLikedTracks 
-        : notLikedTracks.filter(track => {
-            const matches = matchesGenreFilter(track)
-            if (!matches) {
-              console.log(`Genre filter excluded: ${track.name} by ${track.artists?.[0]?.name}`)
-            }
-            return matches
-          })
+      const genreFilteredTracks = filterTracksByGenre(notLikedTracks, genresMap)
       
       console.log(`Genre filter (${selectedGenres.join(', ')}): ${notLikedTracks.length} → ${genreFilteredTracks.length} tracks`)
       
@@ -663,6 +718,49 @@ const MusicDiscovery = () => {
       console.error('Error getting recommendations:', error)
       alert('Error loading music: ' + error.message + '\n\nTip: Make sure you have recent listening history on Spotify.')
     }
+  }
+
+  // Filter tracks by selected genres - FIXED VERSION
+  const filterTracksByGenre = (tracks, genresMap) => {
+    if (selectedGenres.includes('all')) {
+      return tracks
+    }
+    
+    return tracks.filter(track => {
+      const artistIds = track.artists?.map(a => a.id) || []
+      
+      // Get all genres for this track's artists
+      let trackGenres = new Set()
+      artistIds.forEach(artistId => {
+        const genres = genresMap.get(artistId)
+        if (genres && genres.length > 0) {
+          genres.forEach(genre => trackGenres.add(genre.toLowerCase()))
+        }
+      })
+      
+      // CRITICAL FIX: If track has no genre data, exclude it when specific genres are selected
+      // This ensures we only show tracks that match the selected genres
+      if (trackGenres.size === 0) {
+        console.log(`❌ No genre data for track: ${track.name} - excluding from filtered results`)
+        return false
+      }
+      
+      // Check if any track genre matches any selected genre
+      for (const selectedGenre of selectedGenres) {
+        const normalizedSelected = selectedGenre.toLowerCase().replace('-', ' ')
+        for (const trackGenre of trackGenres) {
+          // Check for partial matches (e.g., "hip-hop" matches "hip hop", "pop" matches "k-pop")
+          if (trackGenre.includes(normalizedSelected) || 
+              trackGenre.includes(selectedGenre.replace('-', ''))) {
+            console.log(`✓ Genre match: ${track.name} - ${trackGenre} matches ${selectedGenre}`)
+            return true
+          }
+        }
+      }
+      
+      console.log(`❌ No genre match for track: ${track.name} - genres: ${[...trackGenres].join(', ')}`)
+      return false
+    })
   }
 
   // Add track to Spotify liked songs
@@ -877,49 +975,6 @@ const MusicDiscovery = () => {
     }
   }
 
-  // Check if track matches selected genres
-  const matchesGenreFilter = (track) => {
-    if (selectedGenres.includes('all')) return true
-    
-    // For better genre matching, we'll need to fetch artist details
-    // For now, use a simplified approach based on artist names and track data
-    
-    // Get all artist IDs from the track
-    const artistIds = track.artists?.map(a => a.id) || []
-    
-    // Check against user's top artists to get genre info
-    let trackGenres = new Set()
-    
-    if (userStats?.topArtists) {
-      artistIds.forEach(artistId => {
-        const topArtist = userStats.topArtists.find(a => a.id === artistId)
-        if (topArtist?.genres) {
-          topArtist.genres.forEach(genre => {
-            trackGenres.add(genre.toLowerCase())
-          })
-        }
-      })
-    }
-    
-    // If we have genre data, check for matches
-    if (trackGenres.size > 0) {
-      for (const selectedGenre of selectedGenres) {
-        for (const trackGenre of trackGenres) {
-          // Check for partial matches (e.g., "hip-hop" matches "hip hop", "pop" matches "k-pop")
-          if (trackGenre.includes(selectedGenre.replace('-', ' ')) || 
-              trackGenre.includes(selectedGenre.replace('-', ''))) {
-            return true
-          }
-        }
-      }
-      // Has genre data but no match
-      return false
-    }
-    
-    // No genre data available - include by default to avoid empty results
-    return true
-  }
-
   // Get greeting based on time of day
   const getGreeting = () => {
     const hour = new Date().getHours()
@@ -984,54 +1039,69 @@ const MusicDiscovery = () => {
             <p className="discovery-message">{getDiscoveryMessage()}</p>
           </div>
 
-          {/* Discovery Mode Slider */}
+          {/* Collapsible Discovery Controls */}
           <div className="discovery-controls">
-            <div className="slider-container">
-              <div className="slider-labels">
-                <span>Familiar</span>
-                <span className="slider-percentage">{discoveryMode}% exploratory</span>
-                <span>Exploratory</span>
+            <div className="filters-header" onClick={() => setFiltersCollapsed(!filtersCollapsed)}>
+              <div className="filters-title">
+                <Sliders size={20} />
+                <span>Filters</span>
               </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={discoveryMode}
-                onChange={(e) => setDiscoveryMode(Number(e.target.value))}
-                className="discovery-slider"
-              />
+              <button className="collapse-button">
+                {filtersCollapsed ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
+              </button>
             </div>
 
-            {/* Genre Filter Dropdown */}
-            <div className="genre-filter-container">
-              <button 
-                className="genre-filter-button"
-                onClick={() => setShowGenreFilter(!showGenreFilter)}
-              >
-                <Sliders size={18} />
-                <span>Genre Filter</span>
-                <span className="selected-count">
-                  {selectedGenres.includes('all') ? 'All' : `${selectedGenres.length}`}
-                </span>
-                <span className={`dropdown-arrow ${showGenreFilter ? 'open' : ''}`}>▼</span>
-              </button>
-              
-              {showGenreFilter && (
-                <div className="genre-dropdown">
-                  <div className="genre-tags-filter">
-                    {availableGenres.map(genre => (
-                      <button
-                        key={genre}
-                        className={`genre-tag-filter ${selectedGenres.includes(genre) ? 'active' : ''}`}
-                        onClick={() => toggleGenre(genre)}
-                      >
-                        {genre === 'all' ? '✓ All' : genre}
-                      </button>
-                    ))}
+            {!filtersCollapsed && (
+              <>
+                {/* Discovery Mode Slider */}
+                <div className="slider-container">
+                  <div className="slider-labels">
+                    <span>Familiar</span>
+                    <span className="slider-percentage">{discoveryMode}% exploratory</span>
+                    <span>Exploratory</span>
                   </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={discoveryMode}
+                    onChange={(e) => setDiscoveryMode(Number(e.target.value))}
+                    className="discovery-slider"
+                  />
                 </div>
-              )}
-            </div>
+
+                {/* Genre Filter Dropdown */}
+                <div className="genre-filter-container">
+                  <button 
+                    className="genre-filter-button"
+                    onClick={() => setShowGenreFilter(!showGenreFilter)}
+                  >
+                    <Sliders size={18} />
+                    <span>Genre Filter</span>
+                    <span className="selected-count">
+                      {selectedGenres.includes('all') ? 'All' : `${selectedGenres.length}`}
+                    </span>
+                    <span className={`dropdown-arrow ${showGenreFilter ? 'open' : ''}`}>▼</span>
+                  </button>
+                  
+                  {showGenreFilter && (
+                    <div className="genre-dropdown">
+                      <div className="genre-tags-filter">
+                        {availableGenres.map(genre => (
+                          <button
+                            key={genre}
+                            className={`genre-tag-filter ${selectedGenres.includes(genre) ? 'active' : ''}`}
+                            onClick={() => toggleGenre(genre)}
+                          >
+                            {genre === 'all' ? '✓ All' : genre}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Current Track Card */}

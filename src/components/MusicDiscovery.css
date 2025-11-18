@@ -259,6 +259,48 @@
   border: 1px solid #282828;
 }
 
+/* Collapsible Filters Header */
+.filters-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  margin-bottom: 1rem;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  transition: background 0.2s;
+}
+
+.filters-header:hover {
+  background: #282828;
+}
+
+.filters-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: white;
+}
+
+.collapse-button {
+  background: transparent;
+  border: none;
+  color: #b3b3b3;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: color 0.2s, transform 0.2s;
+}
+
+.collapse-button:hover {
+  color: #1DB954;
+  transform: scale(1.1);
+}
+
 .slider-container label {
   display: flex;
   align-items: center;
