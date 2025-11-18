@@ -11,7 +11,7 @@ const MusicDiscovery = () => {
   const [discoveryMode, setDiscoveryMode] = useState(50) // 0-100, 0=familiar, 100=exploratory
   const [selectedGenres, setSelectedGenres] = useState(['all']) // Selected genre filters
   const [showGenreFilter, setShowGenreFilter] = useState(false) // Show/hide genre dropdown
-  const [filtersCollapsed, setFiltersCollapsed] = useState(false) // Collapse entire filters section
+  const [showFilters, setShowFilters] = useState(true) // Show/hide entire filters section
   const [isLoading, setIsLoading] = useState(false)
   
   // Spotify Web Player
@@ -34,8 +34,8 @@ const MusicDiscovery = () => {
     hated: []
   })
   
-  // Store artist genres for better filtering
-  const [artistGenresMap, setArtistGenresMap] = useState(new Map())
+  // Cache for artist genre data
+  const [artistGenreCache, setArtistGenreCache] = useState({})
 
   // Spotify API config
   const SPOTIFY_CLIENT_ID = '317c65a797af484fb3e2af110acdfd72' // Your client ID
@@ -273,17 +273,25 @@ const MusicDiscovery = () => {
     return likedIds
   }
 
-  // Fetch artist genres for better filtering
+  // Fetch artist genres from Spotify API and cache them
   const fetchArtistGenres = async (artistIds, token) => {
-    const genresMap = new Map()
+    const uncachedIds = artistIds.filter(id => !artistGenreCache[id])
     
-    // Fetch in batches of 50 (Spotify API limit)
-    const batchSize = 50
-    for (let i = 0; i < artistIds.length; i += batchSize) {
-      const batch = artistIds.slice(i, i + batchSize)
-      try {
+    if (uncachedIds.length === 0) {
+      return // All artists already cached
+    }
+    
+    try {
+      // Fetch up to 50 artists at a time (Spotify API limit)
+      const chunkSize = 50
+      const chunks = []
+      for (let i = 0; i < uncachedIds.length; i += chunkSize) {
+        chunks.push(uncachedIds.slice(i, i + chunkSize))
+      }
+      
+      for (const chunk of chunks) {
         const response = await fetch(
-          `https://api.spotify.com/v1/artists?ids=${batch.join(',')}`,
+          `https://api.spotify.com/v1/artists?ids=${chunk.join(',')}`,
           {
             headers: { 'Authorization': `Bearer ${token}` }
           }
@@ -291,23 +299,23 @@ const MusicDiscovery = () => {
         
         if (response.ok) {
           const data = await response.json()
+          const newCache = { ...artistGenreCache }
+          
           data.artists?.forEach(artist => {
-            if (artist && artist.id && artist.genres) {
-              genresMap.set(artist.id, artist.genres)
+            if (artist) {
+              newCache[artist.id] = artist.genres || []
             }
           })
+          
+          setArtistGenreCache(newCache)
         }
         
         // Small delay to avoid rate limiting
-        if (i + batchSize < artistIds.length) {
-          await new Promise(resolve => setTimeout(resolve, 100))
-        }
-      } catch (error) {
-        console.error('Error fetching artist genres:', error)
+        await new Promise(resolve => setTimeout(resolve, 100))
       }
+    } catch (error) {
+      console.error('Error fetching artist genres:', error)
     }
-    
-    return genresMap
   }
 
   // Fetch Spotify user data
@@ -370,6 +378,16 @@ const MusicDiscovery = () => {
       }
 
       setUserStats(userData)
+
+      // Pre-cache genres for top artists
+      const topArtistIds = topArtists.items?.map(a => a.id) || []
+      if (topArtistIds.length > 0) {
+        const initialCache = {}
+        topArtists.items?.forEach(artist => {
+          initialCache[artist.id] = artist.genres || []
+        })
+        setArtistGenreCache(initialCache)
+      }
 
       // Create/update Firebase user profile
       try {
@@ -524,9 +542,69 @@ const MusicDiscovery = () => {
     }
   }
 
-  // Get recommendations using audio features (works in Development Mode)
+  // Improved genre matching function
+  const matchesGenreFilter = (track, trackArtistGenres) => {
+    if (selectedGenres.includes('all')) return true
+    
+    // Normalize selected genres for comparison
+    const normalizedSelectedGenres = selectedGenres.map(g => 
+      g.toLowerCase().replace(/-/g, ' ').trim()
+    )
+    
+    // Check if any of the track's artist genres match the selected filters
+    for (const trackGenre of trackArtistGenres) {
+      const normalizedTrackGenre = trackGenre.toLowerCase().trim()
+      
+      for (const selectedGenre of normalizedSelectedGenres) {
+        // Exact match
+        if (normalizedTrackGenre === selectedGenre) {
+          return true
+        }
+        
+        // Check if the track genre contains the selected genre as a word
+        // This handles cases like "pop" matching "k-pop" or "indie pop"
+        const genreWords = normalizedTrackGenre.split(' ')
+        const selectedWords = selectedGenre.split(' ')
+        
+        // If selected genre is one word, check if it appears in track genre
+        if (selectedWords.length === 1) {
+          if (genreWords.some(word => word === selectedWords[0] || word.includes(selectedWords[0]))) {
+            return true
+          }
+        } else {
+          // Multi-word genres need exact phrase match
+          if (normalizedTrackGenre.includes(selectedGenre)) {
+            return true
+          }
+        }
+        
+        // Special cases for common variations
+        if ((selectedGenre === 'hip hop' || selectedGenre === 'hip-hop' || selectedGenre === 'rap') &&
+            (normalizedTrackGenre.includes('hip hop') || normalizedTrackGenre.includes('rap'))) {
+          return true
+        }
+        
+        if ((selectedGenre === 'r&b' || selectedGenre === 'rnb') &&
+            (normalizedTrackGenre.includes('r&b') || normalizedTrackGenre.includes('rnb'))) {
+          return true
+        }
+        
+        if (selectedGenre === 'electronic' &&
+            (normalizedTrackGenre.includes('electronic') || 
+             normalizedTrackGenre.includes('edm') ||
+             normalizedTrackGenre.includes('techno') ||
+             normalizedTrackGenre.includes('house'))) {
+          return true
+        }
+      }
+    }
+    
+    return false
+  }
+
+  // Get recommendations using multiple sources for larger pool
   const getRecommendations = async (topArtists, token) => {
-    console.log('getRecommendations called (using audio features approach)')
+    console.log('🎵 getRecommendations called - Fetching from multiple sources for larger pool')
     
     if (!token) {
       console.error('No Spotify token available')
@@ -534,125 +612,97 @@ const MusicDiscovery = () => {
     }
 
     try {
-      // Get recently played tracks (works in dev mode)
-      console.log('Fetching recently played tracks...')
-      const recentlyPlayedResponse = await fetch(
-        'https://api.spotify.com/v1/me/player/recently-played?limit=50',
-        {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }
-      )
-
-      if (!recentlyPlayedResponse.ok) {
-        console.error('Failed to fetch recently played:', recentlyPlayedResponse.status)
-        
-        // Fallback to top tracks if recently played doesn't work
-        const topTracksResponse = await fetch(
-          'https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=medium_term',
-          {
-            headers: { 'Authorization': `Bearer ${token}` }
-          }
+      let allTracks = []
+      
+      // FETCH FROM MULTIPLE SOURCES FOR MAXIMUM VARIETY
+      console.log('📥 Fetching tracks from multiple sources...')
+      
+      // 1. Get recently played tracks (limit 50)
+      try {
+        const recentResponse = await fetch(
+          'https://api.spotify.com/v1/me/player/recently-played?limit=50',
+          { headers: { 'Authorization': `Bearer ${token}` } }
         )
         
-        if (!topTracksResponse.ok) {
-          alert('Unable to fetch your listening history. Please try reconnecting.')
-          return
+        if (recentResponse.ok) {
+          const data = await recentResponse.json()
+          const tracks = data.items?.map(item => item.track) || []
+          allTracks.push(...tracks)
+          console.log(`✓ Recently played: ${tracks.length} tracks`)
         }
-        
-        const topTracksData = await topTracksResponse.json()
-        const tracks = topTracksData.items || []
-        
-        if (tracks.length === 0) {
-          alert('No listening history found. Listen to some music on Spotify first!')
-          return
-        }
-        
-        // Filter out already liked songs from top tracks
-        const notLikedTopTracks = tracks.filter(track => !likedSongIds.has(track.id))
-        
-        console.log(`Top tracks: ${tracks.length}, After filtering liked: ${notLikedTopTracks.length}`)
-        
-        if (notLikedTopTracks.length === 0) {
-          alert('All your top tracks are already liked! Great taste! Try listening to new music.')
-          return
-        }
-        
-        // Fetch artist genres for better filtering
-        const allArtistIds = [...new Set(notLikedTopTracks.flatMap(track => 
-          track.artists?.map(a => a.id) || []
-        ))]
-        console.log('Fetching genres for', allArtistIds.length, 'artists...')
-        const genresMap = await fetchArtistGenres(allArtistIds, token)
-        setArtistGenresMap(genresMap)
-        
-        // Apply genre filter
-        const genreFilteredTracks = filterTracksByGenre(notLikedTopTracks, genresMap)
-        
-        if (genreFilteredTracks.length === 0) {
-          alert('No tracks match your selected genres. Try selecting different genres or choose "All".')
-          return
-        }
-        
-        // Use the user's top tracks (filtered) as recommendations
-        console.log('Using filtered top tracks as recommendations:', genreFilteredTracks.length)
-        setRecommendations(genreFilteredTracks)
-        setCurrentTrack(genreFilteredTracks[0])
-        return
+      } catch (error) {
+        console.warn('Could not fetch recently played:', error)
       }
-
-      const recentlyPlayedData = await recentlyPlayedResponse.json()
-      const recentTracks = recentlyPlayedData.items?.map(item => item.track) || []
       
-      console.log('Recently played tracks:', recentTracks.length)
+      // 2. Get top tracks from ALL time ranges for maximum variety
+      const timeRanges = ['short_term', 'medium_term', 'long_term']
+      for (const timeRange of timeRanges) {
+        try {
+          const topResponse = await fetch(
+            `https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=${timeRange}`,
+            { headers: { 'Authorization': `Bearer ${token}` } }
+          )
+          
+          if (topResponse.ok) {
+            const data = await topResponse.json()
+            const tracks = data.items || []
+            allTracks.push(...tracks)
+            console.log(`✓ Top tracks (${timeRange}): ${tracks.length} tracks`)
+          }
+          
+          // Small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 100))
+        } catch (error) {
+          console.warn(`Could not fetch top tracks (${timeRange}):`, error)
+        }
+      }
 
-      if (recentTracks.length === 0) {
-        alert('No recent listening history found. Play some music on Spotify first!')
+      console.log(`📊 Total tracks fetched from all sources: ${allTracks.length}`)
+
+      if (allTracks.length === 0) {
+        alert('No listening history found. Listen to some music on Spotify first!')
         return
       }
 
-      // Remove duplicates
-      const uniqueTracks = recentTracks.filter((track, index, self) =>
-        index === self.findIndex((t) => t.id === track.id)
+      // Remove duplicates by track ID
+      const uniqueTracks = allTracks.filter((track, index, self) =>
+        track && track.id && index === self.findIndex((t) => t && t.id === track.id)
       )
 
-      console.log('Unique tracks:', uniqueTracks.length)
-      console.log('Liked songs Set size:', likedSongIds.size)
+      console.log(`🔍 Unique tracks after deduplication: ${uniqueTracks.length}`)
 
       // Filter out songs user has already liked on Spotify
-      const notLikedTracks = uniqueTracks.filter(track => {
-        const isLiked = likedSongIds.has(track.id)
-        if (isLiked) {
-          console.log('✓ Filtering out liked song:', track.name, 'ID:', track.id)
-        }
-        return !isLiked
-      })
+      const notLikedTracks = uniqueTracks.filter(track => !likedSongIds.has(track.id))
       
-      console.log(`Filtered out ${uniqueTracks.length - notLikedTracks.length} already-liked songs`)
-      console.log('Tracks after filtering liked songs:', notLikedTracks.length)
+      console.log(`❤️ Filtered out ${uniqueTracks.length - notLikedTracks.length} already-liked songs`)
+      console.log(`📝 Tracks remaining after like filter: ${notLikedTracks.length}`)
+      
+      if (notLikedTracks.length === 0) {
+        alert('All your tracks are already liked! Great taste! Try listening to new music on Spotify.')
+        return
+      }
       
       // Fetch artist genres for better filtering
       const allArtistIds = [...new Set(notLikedTracks.flatMap(track => 
         track.artists?.map(a => a.id) || []
       ))]
-      console.log('Fetching genres for', allArtistIds.length, 'artists...')
-      const genresMap = await fetchArtistGenres(allArtistIds, token)
-      setArtistGenresMap(genresMap)
+      console.log(`🎨 Fetching genres for ${allArtistIds.length} unique artists...`)
+      await fetchArtistGenres(allArtistIds, token)
       
-      // Apply genre filter
-      const genreFilteredTracks = filterTracksByGenre(notLikedTracks, genresMap)
+      // Apply genre filter with fetched data
+      const genreFilteredTracks = await filterTracksByGenre(notLikedTracks, token)
       
-      console.log(`Genre filter (${selectedGenres.join(', ')}): ${notLikedTracks.length} → ${genreFilteredTracks.length} tracks`)
+      console.log(`🎭 Genre filter (${selectedGenres.join(', ')}): ${notLikedTracks.length} → ${genreFilteredTracks.length} tracks`)
       
       if (genreFilteredTracks.length > 0) {
-        console.log('Sample tracks passing all filters:', genreFilteredTracks.slice(0, 3).map(t => ({ 
+        console.log('📋 Sample tracks passing all filters:', genreFilteredTracks.slice(0, 5).map(t => ({ 
           name: t.name, 
-          artist: t.artists?.[0]?.name,
-          id: t.id 
+          artist: t.artists?.[0]?.name
         })))
       }
 
       if (genreFilteredTracks.length === 0) {
-        alert('No tracks match your selected genres. Try selecting different genres or choose "All".')
+        alert(`No tracks match your selected genres (${selectedGenres.join(', ')}). Try selecting different genres or choose "All".`)
         return
       }
 
@@ -662,24 +712,27 @@ const MusicDiscovery = () => {
       // 100 = Completely random/exploratory
       let selectedTracks = []
       
-      const availableTracks = [...genreFilteredTracks] // Use genre-filtered tracks
+      const availableTracks = [...genreFilteredTracks]
+      
+      // Use as many tracks as possible (up to all of them)
+      const maxTracks = Math.min(availableTracks.length, 100) // Allow up to 100 recommendations
       
       if (discoveryMode === 0) {
         // 0% exploratory - just most recent
-        selectedTracks = availableTracks.slice(0, 20)
-        console.log('Discovery mode: 0% - Using most recent tracks')
+        selectedTracks = availableTracks.slice(0, maxTracks)
+        console.log(`🎯 Discovery mode: 0% - Using ${selectedTracks.length} most recent tracks`)
       } else if (discoveryMode === 100) {
         // 100% exploratory - completely random
         selectedTracks = availableTracks
           .sort(() => Math.random() - 0.5)
-          .slice(0, 20)
-        console.log('Discovery mode: 100% - Completely randomized')
+          .slice(0, maxTracks)
+        console.log(`🎲 Discovery mode: 100% - Completely randomized ${selectedTracks.length} tracks`)
       } else {
         // Mixed mode - blend recent and random based on percentage
-        const numRecent = Math.floor(20 * (1 - discoveryMode / 100))
-        const numRandom = 20 - numRecent
+        const numRecent = Math.floor(maxTracks * (1 - discoveryMode / 100))
+        const numRandom = maxTracks - numRecent
         
-        console.log(`Discovery mode: ${discoveryMode}% - ${numRecent} recent + ${numRandom} random`)
+        console.log(`🎚️ Discovery mode: ${discoveryMode}% - ${numRecent} recent + ${numRandom} random`)
         
         // Take some recent tracks
         const recentPicks = availableTracks.slice(0, numRecent)
@@ -695,8 +748,8 @@ const MusicDiscovery = () => {
           .sort(() => Math.random() - 0.5)
       }
 
-      console.log('Selected tracks for recommendations:', selectedTracks.length)
-      console.log('Discovery mode result:', selectedTracks.slice(0, 3).map(t => t.name))
+      console.log(`✅ Final recommendation pool: ${selectedTracks.length} tracks available`)
+      console.log('🎵 First 3 tracks:', selectedTracks.slice(0, 3).map(t => `${t.name} - ${t.artists?.[0]?.name}`).join(' | '))
 
       if (selectedTracks.length > 0) {
         setRecommendations(selectedTracks)
@@ -709,58 +762,53 @@ const MusicDiscovery = () => {
           }, 1000)
         }
         
-        console.log('Successfully loaded:', selectedTracks[0].name, 'by', selectedTracks[0].artists[0].name)
+        console.log(`🎉 Successfully loaded: "${selectedTracks[0].name}" by ${selectedTracks[0].artists[0].name}`)
       } else {
         alert('No tracks available. Try playing more music on Spotify!')
       }
 
     } catch (error) {
-      console.error('Error getting recommendations:', error)
+      console.error('❌ Error getting recommendations:', error)
       alert('Error loading music: ' + error.message + '\n\nTip: Make sure you have recent listening history on Spotify.')
     }
   }
 
-  // Filter tracks by selected genres - FIXED VERSION
-  const filterTracksByGenre = (tracks, genresMap) => {
+  // Filter tracks by selected genres using cached artist data
+  const filterTracksByGenre = async (tracks, token) => {
     if (selectedGenres.includes('all')) {
       return tracks
     }
     
-    return tracks.filter(track => {
-      const artistIds = track.artists?.map(a => a.id) || []
+    const filteredTracks = []
+    
+    for (const track of tracks) {
+      // Get all genres for all artists of this track
+      const trackGenres = new Set()
       
-      // Get all genres for this track's artists
-      let trackGenres = new Set()
-      artistIds.forEach(artistId => {
-        const genres = genresMap.get(artistId)
-        if (genres && genres.length > 0) {
-          genres.forEach(genre => trackGenres.add(genre.toLowerCase()))
-        }
-      })
-      
-      // CRITICAL FIX: If track has no genre data, exclude it when specific genres are selected
-      // This ensures we only show tracks that match the selected genres
-      if (trackGenres.size === 0) {
-        console.log(`❌ No genre data for track: ${track.name} - excluding from filtered results`)
-        return false
+      for (const artist of track.artists || []) {
+        const genres = artistGenreCache[artist.id] || []
+        genres.forEach(genre => trackGenres.add(genre))
       }
       
-      // Check if any track genre matches any selected genre
-      for (const selectedGenre of selectedGenres) {
-        const normalizedSelected = selectedGenre.toLowerCase().replace('-', ' ')
-        for (const trackGenre of trackGenres) {
-          // Check for partial matches (e.g., "hip-hop" matches "hip hop", "pop" matches "k-pop")
-          if (trackGenre.includes(normalizedSelected) || 
-              trackGenre.includes(selectedGenre.replace('-', ''))) {
-            console.log(`✓ Genre match: ${track.name} - ${trackGenre} matches ${selectedGenre}`)
-            return true
-          }
-        }
+      // Convert to array for matching
+      const genresArray = Array.from(trackGenres)
+      
+      // If track has no genre data, skip it to avoid false positives
+      if (genresArray.length === 0) {
+        console.log(`⚠️ Skipping track with no genre data: ${track.name} by ${track.artists?.[0]?.name}`)
+        continue
       }
       
-      console.log(`❌ No genre match for track: ${track.name} - genres: ${[...trackGenres].join(', ')}`)
-      return false
-    })
+      // Check if track matches any selected genre
+      if (matchesGenreFilter(track, genresArray)) {
+        filteredTracks.push(track)
+        console.log(`✓ Genre match: ${track.name} by ${track.artists?.[0]?.name} - Genres: ${genresArray.join(', ')}`)
+      } else {
+        console.log(`✗ Genre mismatch: ${track.name} by ${track.artists?.[0]?.name} - Genres: ${genresArray.join(', ')}`)
+      }
+    }
+    
+    return filteredTracks
   }
 
   // Add track to Spotify liked songs
@@ -1040,19 +1088,18 @@ const MusicDiscovery = () => {
           </div>
 
           {/* Collapsible Discovery Controls */}
-          <div className="discovery-controls">
-            <div className="filters-header" onClick={() => setFiltersCollapsed(!filtersCollapsed)}>
-              <div className="filters-title">
-                <Sliders size={20} />
-                <span>Filters</span>
-              </div>
-              <button className="collapse-button">
-                {filtersCollapsed ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
-              </button>
-            </div>
+          <div className="discovery-controls-wrapper">
+            <button 
+              className="filters-toggle-button"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <Sliders size={18} />
+              <span>Filters</span>
+              {showFilters ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </button>
 
-            {!filtersCollapsed && (
-              <>
+            {showFilters && (
+              <div className="discovery-controls">
                 {/* Discovery Mode Slider */}
                 <div className="slider-container">
                   <div className="slider-labels">
@@ -1100,7 +1147,7 @@ const MusicDiscovery = () => {
                     </div>
                   )}
                 </div>
-              </>
+              </div>
             )}
           </div>
 
