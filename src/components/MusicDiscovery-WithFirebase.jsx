@@ -656,6 +656,33 @@ const MusicDiscovery = () => {
           console.warn(`Could not fetch top tracks (${timeRange}):`, error)
         }
       }
+      
+      // 3. Get top tracks from user's favorite artists (to find unheard songs)
+      console.log('🎤 Fetching tracks from your top artists...')
+      if (userStats?.topArtists && userStats.topArtists.length > 0) {
+        const topArtistIds = userStats.topArtists.slice(0, 10).map(a => a.id) // Top 10 artists
+        
+        for (const artistId of topArtistIds) {
+          try {
+            const artistTracksResponse = await fetch(
+              `https://api.spotify.com/v1/artists/${artistId}/top-tracks?market=US`,
+              { headers: { 'Authorization': `Bearer ${token}` } }
+            )
+            
+            if (artistTracksResponse.ok) {
+              const data = await artistTracksResponse.json()
+              const tracks = data.tracks || []
+              allTracks.push(...tracks)
+            }
+            
+            // Small delay to avoid rate limiting
+            await new Promise(resolve => setTimeout(resolve, 100))
+          } catch (error) {
+            console.warn(`Could not fetch tracks for artist ${artistId}:`, error)
+          }
+        }
+        console.log(`✓ Top tracks from your favorite artists added`)
+      }
 
       console.log(`📊 Total tracks fetched from all sources: ${allTracks.length}`)
 
@@ -706,21 +733,82 @@ const MusicDiscovery = () => {
         return
       }
 
+      // SMART PRIORITIZATION: Favor unheard songs from top artists
+      console.log('🎯 Applying smart prioritization...')
+      
+      // Get top artist IDs for scoring
+      const topArtistIds = new Set(userStats?.topArtists?.slice(0, 20).map(a => a.id) || [])
+      
+      // Score each track based on:
+      // 1. Whether it's from a top artist (higher priority)
+      // 2. How recently it was played (lower = less heard = higher priority)
+      const scoredTracks = genreFilteredTracks.map((track, index) => {
+        let score = 0
+        
+        // Priority 1: Is this from a top artist? (0-100 points)
+        const hasTopArtist = track.artists?.some(artist => topArtistIds.has(artist.id))
+        if (hasTopArtist) {
+          score += 100
+          
+          // Bonus: Which top artist? (earlier = more points)
+          const artistRank = track.artists?.reduce((bestRank, artist) => {
+            const rank = userStats?.topArtists?.findIndex(a => a.id === artist.id)
+            if (rank !== -1 && rank !== undefined && (bestRank === -1 || rank < bestRank)) {
+              return rank
+            }
+            return bestRank
+          }, -1)
+          
+          if (artistRank !== -1) {
+            score += (20 - artistRank) * 3 // Top artist = +57 points, 20th artist = +3 points
+          }
+        }
+        
+        // Priority 2: Prioritize tracks that appear later in the list (less recently played)
+        // This ensures we show songs user hasn't heard in a while
+        score += (genreFilteredTracks.length - index) / genreFilteredTracks.length * 50
+        
+        return {
+          track,
+          score,
+          hasTopArtist,
+          originalIndex: index
+        }
+      })
+      
+      // Sort by score (highest first) - this puts unheard songs from top artists at the top
+      scoredTracks.sort((a, b) => b.score - a.score)
+      
+      // Log prioritization results
+      const topArtistCount = scoredTracks.filter(t => t.hasTopArtist).length
+      console.log(`✨ Prioritization complete:`)
+      console.log(`   - ${topArtistCount} tracks from your top ${topArtistIds.size} artists`)
+      console.log(`   - ${genreFilteredTracks.length - topArtistCount} tracks from other artists`)
+      console.log(`   - Top 5 recommended:`, scoredTracks.slice(0, 5).map(t => ({
+        name: t.track.name,
+        artist: t.track.artists?.[0]?.name,
+        score: Math.round(t.score),
+        fromTopArtist: t.hasTopArtist
+      })))
+      
+      // Use the prioritized track list
+      const prioritizedTracks = scoredTracks.map(t => t.track)
+
       // Based on discovery mode, select tracks
       // 0 = Most recent/familiar songs
       // 50 = Mix of recent and random
       // 100 = Completely random/exploratory
       let selectedTracks = []
       
-      const availableTracks = [...genreFilteredTracks]
+      const availableTracks = [...prioritizedTracks]
       
       // Use as many tracks as possible (up to all of them)
       const maxTracks = Math.min(availableTracks.length, 100) // Allow up to 100 recommendations
       
       if (discoveryMode === 0) {
-        // 0% exploratory - just most recent
+        // 0% exploratory - prioritized order (best matches first)
         selectedTracks = availableTracks.slice(0, maxTracks)
-        console.log(`🎯 Discovery mode: 0% - Using ${selectedTracks.length} most recent tracks`)
+        console.log(`🎯 Discovery mode: 0% - Using ${selectedTracks.length} prioritized tracks`)
       } else if (discoveryMode === 100) {
         // 100% exploratory - completely random
         selectedTracks = availableTracks
@@ -728,23 +816,23 @@ const MusicDiscovery = () => {
           .slice(0, maxTracks)
         console.log(`🎲 Discovery mode: 100% - Completely randomized ${selectedTracks.length} tracks`)
       } else {
-        // Mixed mode - blend recent and random based on percentage
-        const numRecent = Math.floor(maxTracks * (1 - discoveryMode / 100))
-        const numRandom = maxTracks - numRecent
+        // Mixed mode - blend prioritized and random based on percentage
+        const numPrioritized = Math.floor(maxTracks * (1 - discoveryMode / 100))
+        const numRandom = maxTracks - numPrioritized
         
-        console.log(`🎚️ Discovery mode: ${discoveryMode}% - ${numRecent} recent + ${numRandom} random`)
+        console.log(`🎚️ Discovery mode: ${discoveryMode}% - ${numPrioritized} prioritized + ${numRandom} random`)
         
-        // Take some recent tracks
-        const recentPicks = availableTracks.slice(0, numRecent)
+        // Take some prioritized tracks (from top artists, less heard)
+        const prioritizedPicks = availableTracks.slice(0, numPrioritized)
         
         // Take some random tracks (excluding the ones we already picked)
-        const remainingTracks = availableTracks.slice(numRecent)
+        const remainingTracks = availableTracks.slice(numPrioritized)
         const randomPicks = remainingTracks
           .sort(() => Math.random() - 0.5)
           .slice(0, numRandom)
         
         // Combine and shuffle
-        selectedTracks = [...recentPicks, ...randomPicks]
+        selectedTracks = [...prioritizedPicks, ...randomPicks]
           .sort(() => Math.random() - 0.5)
       }
 
