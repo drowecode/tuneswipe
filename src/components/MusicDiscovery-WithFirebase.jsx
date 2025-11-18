@@ -9,6 +9,7 @@ const MusicDiscovery = () => {
   const [userId, setUserId] = useState(null)
   const [currentView, setCurrentView] = useState('discover') // discover, stats
   const [discoveryMode, setDiscoveryMode] = useState(50) // 0-100, 0=familiar, 100=exploratory
+  const [selectedGenres, setSelectedGenres] = useState(['all']) // Selected genre filters
   const [isLoading, setIsLoading] = useState(false)
   
   // Spotify Web Player
@@ -573,12 +574,19 @@ const MusicDiscovery = () => {
       console.log(`Filtered out ${uniqueTracks.length - notLikedTracks.length} already-liked songs`)
       console.log('Tracks after filtering:', notLikedTracks.length)
       
-      if (notLikedTracks.length > 0) {
-        console.log('Sample tracks passing filter:', notLikedTracks.slice(0, 3).map(t => ({ id: t.id, name: t.name, isLiked: likedSongIds.has(t.id) })))
+      // Apply genre filter
+      const genreFilteredTracks = selectedGenres.includes('all') 
+        ? notLikedTracks 
+        : notLikedTracks.filter(matchesGenreFilter)
+      
+      console.log(`After genre filter (${selectedGenres.join(', ')}):`, genreFilteredTracks.length)
+      
+      if (genreFilteredTracks.length > 0) {
+        console.log('Sample tracks passing filter:', genreFilteredTracks.slice(0, 3).map(t => ({ id: t.id, name: t.name, isLiked: likedSongIds.has(t.id) })))
       }
 
-      if (notLikedTracks.length === 0) {
-        alert('All tracks in your recent history are already liked! Listen to more new music on Spotify.')
+      if (genreFilteredTracks.length === 0) {
+        alert('No tracks match your selected genres. Try selecting different genres or choose "All".')
         return
       }
 
@@ -588,7 +596,7 @@ const MusicDiscovery = () => {
       // 100 = Completely random/exploratory
       let selectedTracks = []
       
-      const availableTracks = [...notLikedTracks] // Make a copy
+      const availableTracks = [...genreFilteredTracks] // Use genre-filtered tracks
       
       if (discoveryMode === 0) {
         // 0% exploratory - just most recent
@@ -750,18 +758,18 @@ const MusicDiscovery = () => {
     }
   }
 
-  // Update recommendations when discovery mode changes (with debounce)
+  // Update recommendations when discovery mode or genre filters change (with debounce)
   useEffect(() => {
     if (isConnected && userStats?.topArtists && spotifyToken) {
-      console.log('Discovery mode changed to:', discoveryMode)
+      console.log('Discovery mode or genres changed:', discoveryMode, selectedGenres)
       const timeoutId = setTimeout(() => {
-        console.log('Fetching new recommendations for discovery mode:', discoveryMode)
+        console.log('Fetching new recommendations for discovery mode:', discoveryMode, 'genres:', selectedGenres)
         getRecommendations(userStats.topArtists, spotifyToken)
-      }, 500) // Wait 500ms after user stops dragging slider
+      }, 500) // Wait 500ms after user stops making changes
       
       return () => clearTimeout(timeoutId)
     }
-  }, [discoveryMode, isConnected, userStats, spotifyToken])
+  }, [discoveryMode, selectedGenres, isConnected, userStats, spotifyToken])
 
   // Login view
   if (!isConnected) {
@@ -803,6 +811,88 @@ const MusicDiscovery = () => {
         </div>
       </div>
     )
+  }
+
+  // Common music genres for filtering
+  const availableGenres = [
+    'all',
+    'pop',
+    'rock',
+    'hip-hop',
+    'rap',
+    'r&b',
+    'indie',
+    'electronic',
+    'edm',
+    'dance',
+    'house',
+    'techno',
+    'country',
+    'folk',
+    'jazz',
+    'blues',
+    'classical',
+    'metal',
+    'punk',
+    'alternative',
+    'soul',
+    'funk',
+    'reggae',
+    'latin',
+    'k-pop',
+    'j-pop',
+    'afrobeat'
+  ]
+
+  // Toggle genre selection
+  const toggleGenre = (genre) => {
+    if (genre === 'all') {
+      setSelectedGenres(['all'])
+    } else {
+      setSelectedGenres(prev => {
+        // Remove 'all' if selecting specific genre
+        const withoutAll = prev.filter(g => g !== 'all')
+        
+        if (withoutAll.includes(genre)) {
+          // Remove the genre
+          const newGenres = withoutAll.filter(g => g !== genre)
+          // If no genres selected, default to 'all'
+          return newGenres.length === 0 ? ['all'] : newGenres
+        } else {
+          // Add the genre
+          return [...withoutAll, genre]
+        }
+      })
+    }
+  }
+
+  // Check if track matches selected genres
+  const matchesGenreFilter = (track) => {
+    if (selectedGenres.includes('all')) return true
+    
+    // Get track's artists and their genres
+    const trackGenres = new Set()
+    
+    // Add genres from the track's artists (if available from user's top artists data)
+    if (userStats?.topArtists) {
+      track.artists?.forEach(artist => {
+        const topArtist = userStats.topArtists.find(a => a.id === artist.id)
+        topArtist?.genres?.forEach(genre => trackGenres.add(genre.toLowerCase()))
+      })
+    }
+    
+    // Check if any of the track's genres match selected genres
+    for (const selectedGenre of selectedGenres) {
+      for (const trackGenre of trackGenres) {
+        if (trackGenre.includes(selectedGenre) || selectedGenre.includes(trackGenre)) {
+          return true
+        }
+      }
+    }
+    
+    // If no genre match found but we have genre filters, exclude the track
+    // If track has no genre data, include it by default
+    return trackGenres.size === 0
   }
 
   // Get greeting based on time of day
@@ -885,6 +975,28 @@ const MusicDiscovery = () => {
                 onChange={(e) => setDiscoveryMode(Number(e.target.value))}
                 className="discovery-slider"
               />
+            </div>
+
+            {/* Genre Filter */}
+            <div className="genre-filter-container">
+              <div className="genre-filter-header">
+                <Sliders size={18} />
+                <span>Filter by Genre</span>
+                <span className="selected-count">
+                  {selectedGenres.includes('all') ? 'All genres' : `${selectedGenres.length} selected`}
+                </span>
+              </div>
+              <div className="genre-tags-filter">
+                {availableGenres.map(genre => (
+                  <button
+                    key={genre}
+                    className={`genre-tag-filter ${selectedGenres.includes(genre) ? 'active' : ''}`}
+                    onClick={() => toggleGenre(genre)}
+                  >
+                    {genre === 'all' ? '✓ All' : genre}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

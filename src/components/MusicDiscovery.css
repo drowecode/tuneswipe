@@ -321,6 +321,65 @@
   margin-top: 0.5rem;
 }
 
+/* Genre Filter */
+.genre-filter-container {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #282828;
+}
+
+.genre-filter-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  color: white;
+  font-weight: 600;
+}
+
+.selected-count {
+  margin-left: auto;
+  font-size: 0.875rem;
+  color: #1DB954;
+  font-weight: 700;
+}
+
+.genre-tags-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.genre-tag-filter {
+  padding: 0.5rem 1rem;
+  background: #282828;
+  color: #b3b3b3;
+  border: 2px solid #282828;
+  border-radius: 1.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: capitalize;
+}
+
+.genre-tag-filter:hover {
+  background: #3a3a3a;
+  color: white;
+  transform: translateY(-2px);
+}
+
+.genre-tag-filter.active {
+  background: #1DB954;
+  color: white;
+  border-color: #1DB954;
+  box-shadow: 0 4px 12px rgba(29, 185, 84, 0.4);
+}
+
+.genre-tag-filter:active {
+  transform: translateY(0);
+}
+
 /* New Track Card Layout - Horizontal */
 .track-card-new {
   background: #181818;
