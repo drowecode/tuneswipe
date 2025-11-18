@@ -10,6 +10,7 @@ const MusicDiscovery = () => {
   const [currentView, setCurrentView] = useState('discover') // discover, stats
   const [discoveryMode, setDiscoveryMode] = useState(50) // 0-100, 0=familiar, 100=exploratory
   const [selectedGenres, setSelectedGenres] = useState(['all']) // Selected genre filters
+  const [showGenreFilter, setShowGenreFilter] = useState(false) // Show/hide genre dropdown
   const [isLoading, setIsLoading] = useState(false)
   
   // Spotify Web Player
@@ -577,12 +578,22 @@ const MusicDiscovery = () => {
       // Apply genre filter
       const genreFilteredTracks = selectedGenres.includes('all') 
         ? notLikedTracks 
-        : notLikedTracks.filter(matchesGenreFilter)
+        : notLikedTracks.filter(track => {
+            const matches = matchesGenreFilter(track)
+            if (!matches) {
+              console.log(`Genre filter excluded: ${track.name} by ${track.artists?.[0]?.name}`)
+            }
+            return matches
+          })
       
-      console.log(`After genre filter (${selectedGenres.join(', ')}):`, genreFilteredTracks.length)
+      console.log(`Genre filter (${selectedGenres.join(', ')}): ${notLikedTracks.length} → ${genreFilteredTracks.length} tracks`)
       
       if (genreFilteredTracks.length > 0) {
-        console.log('Sample tracks passing filter:', genreFilteredTracks.slice(0, 3).map(t => ({ id: t.id, name: t.name, isLiked: likedSongIds.has(t.id) })))
+        console.log('Sample tracks passing all filters:', genreFilteredTracks.slice(0, 3).map(t => ({ 
+          name: t.name, 
+          artist: t.artists?.[0]?.name,
+          id: t.id 
+        })))
       }
 
       if (genreFilteredTracks.length === 0) {
@@ -870,29 +881,43 @@ const MusicDiscovery = () => {
   const matchesGenreFilter = (track) => {
     if (selectedGenres.includes('all')) return true
     
-    // Get track's artists and their genres
-    const trackGenres = new Set()
+    // For better genre matching, we'll need to fetch artist details
+    // For now, use a simplified approach based on artist names and track data
     
-    // Add genres from the track's artists (if available from user's top artists data)
+    // Get all artist IDs from the track
+    const artistIds = track.artists?.map(a => a.id) || []
+    
+    // Check against user's top artists to get genre info
+    let trackGenres = new Set()
+    
     if (userStats?.topArtists) {
-      track.artists?.forEach(artist => {
-        const topArtist = userStats.topArtists.find(a => a.id === artist.id)
-        topArtist?.genres?.forEach(genre => trackGenres.add(genre.toLowerCase()))
+      artistIds.forEach(artistId => {
+        const topArtist = userStats.topArtists.find(a => a.id === artistId)
+        if (topArtist?.genres) {
+          topArtist.genres.forEach(genre => {
+            trackGenres.add(genre.toLowerCase())
+          })
+        }
       })
     }
     
-    // Check if any of the track's genres match selected genres
-    for (const selectedGenre of selectedGenres) {
-      for (const trackGenre of trackGenres) {
-        if (trackGenre.includes(selectedGenre) || selectedGenre.includes(trackGenre)) {
-          return true
+    // If we have genre data, check for matches
+    if (trackGenres.size > 0) {
+      for (const selectedGenre of selectedGenres) {
+        for (const trackGenre of trackGenres) {
+          // Check for partial matches (e.g., "hip-hop" matches "hip hop", "pop" matches "k-pop")
+          if (trackGenre.includes(selectedGenre.replace('-', ' ')) || 
+              trackGenre.includes(selectedGenre.replace('-', ''))) {
+            return true
+          }
         }
       }
+      // Has genre data but no match
+      return false
     }
     
-    // If no genre match found but we have genre filters, exclude the track
-    // If track has no genre data, include it by default
-    return trackGenres.size === 0
+    // No genre data available - include by default to avoid empty results
+    return true
   }
 
   // Get greeting based on time of day
@@ -977,26 +1002,35 @@ const MusicDiscovery = () => {
               />
             </div>
 
-            {/* Genre Filter */}
+            {/* Genre Filter Dropdown */}
             <div className="genre-filter-container">
-              <div className="genre-filter-header">
+              <button 
+                className="genre-filter-button"
+                onClick={() => setShowGenreFilter(!showGenreFilter)}
+              >
                 <Sliders size={18} />
-                <span>Filter by Genre</span>
+                <span>Genre Filter</span>
                 <span className="selected-count">
-                  {selectedGenres.includes('all') ? 'All genres' : `${selectedGenres.length} selected`}
+                  {selectedGenres.includes('all') ? 'All' : `${selectedGenres.length}`}
                 </span>
-              </div>
-              <div className="genre-tags-filter">
-                {availableGenres.map(genre => (
-                  <button
-                    key={genre}
-                    className={`genre-tag-filter ${selectedGenres.includes(genre) ? 'active' : ''}`}
-                    onClick={() => toggleGenre(genre)}
-                  >
-                    {genre === 'all' ? '✓ All' : genre}
-                  </button>
-                ))}
-              </div>
+                <span className={`dropdown-arrow ${showGenreFilter ? 'open' : ''}`}>▼</span>
+              </button>
+              
+              {showGenreFilter && (
+                <div className="genre-dropdown">
+                  <div className="genre-tags-filter">
+                    {availableGenres.map(genre => (
+                      <button
+                        key={genre}
+                        className={`genre-tag-filter ${selectedGenres.includes(genre) ? 'active' : ''}`}
+                        onClick={() => toggleGenre(genre)}
+                      >
+                        {genre === 'all' ? '✓ All' : genre}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

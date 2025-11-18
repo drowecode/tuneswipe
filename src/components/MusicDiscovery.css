@@ -321,27 +321,84 @@
   margin-top: 0.5rem;
 }
 
-/* Genre Filter */
+/* Genre Filter Dropdown */
 .genre-filter-container {
-  margin-top: 1.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #282828;
+  margin-top: 1rem;
+  position: relative;
 }
 
-.genre-filter-header {
+.genre-filter-button {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 1rem;
+  padding: 0.875rem 1rem;
+  background: #282828;
   color: white;
+  border: 2px solid #282828;
+  border-radius: 0.75rem;
   font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.genre-filter-button:hover {
+  background: #3a3a3a;
+  border-color: #1DB954;
+}
+
+.genre-filter-button span:first-of-type {
+  flex: 1;
+  text-align: left;
 }
 
 .selected-count {
-  margin-left: auto;
+  padding: 0.25rem 0.75rem;
+  background: #1DB954;
+  color: white;
+  border-radius: 1rem;
   font-size: 0.875rem;
-  color: #1DB954;
   font-weight: 700;
+}
+
+.dropdown-arrow {
+  font-size: 0.75rem;
+  transition: transform 0.3s;
+  color: #b3b3b3;
+}
+
+.dropdown-arrow.open {
+  transform: rotate(180deg);
+}
+
+.genre-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.5rem;
+  padding: 1rem;
+  background: #181818;
+  border: 2px solid #282828;
+  border-radius: 0.75rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.genre-dropdown::-webkit-scrollbar {
+  width: 8px;
+}
+
+.genre-dropdown::-webkit-scrollbar-track {
+  background: #282828;
+  border-radius: 4px;
+}
+
+.genre-dropdown::-webkit-scrollbar-thumb {
+  background: #1DB954;
+  border-radius: 4px;
 }
 
 .genre-tags-filter {
@@ -354,7 +411,7 @@
   padding: 0.5rem 1rem;
   background: #282828;
   color: #b3b3b3;
-  border: 2px solid #282828;
+  border: 2px solid transparent;
   border-radius: 1.5rem;
   font-size: 0.875rem;
   font-weight: 600;
