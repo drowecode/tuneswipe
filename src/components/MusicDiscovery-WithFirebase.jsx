@@ -38,8 +38,8 @@ const MusicDiscovery = () => {
   const [artistGenreCache, setArtistGenreCache] = useState({})
 
   // Spotify API config
-  const SPOTIFY_CLIENT_ID = '317c65a797af484fb3e2af110acdfd72' // Your client ID
-  const REDIRECT_URI = 'https://www.tuneswipe.xyz'
+  const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID
+  const REDIRECT_URI = import.meta.env.VITE_SPOTIFY_REDIRECT_URI
   const SPOTIFY_AUTH_ENDPOINT = 'https://accounts.spotify.com/authorize'
   const SPOTIFY_TOKEN_ENDPOINT = 'https://accounts.spotify.com/api/token'
   const SPOTIFY_SCOPES = [
@@ -78,8 +78,8 @@ const MusicDiscovery = () => {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
     const code = urlParams.get('code')
-    const storedToken = window.localStorage.getItem('spotify_token')
-    const tokenExpiry = window.localStorage.getItem('spotify_token_expiry')
+    const storedToken = sessionStorage.getItem('spotify_token')
+    const tokenExpiry = sessionStorage.getItem('spotify_token_expiry')
 
     // Check if stored token is still valid
     if (storedToken && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
@@ -164,7 +164,7 @@ const MusicDiscovery = () => {
 
   // Exchange authorization code for access token
   const exchangeCodeForToken = async (code) => {
-    const codeVerifier = window.localStorage.getItem('code_verifier')
+    const codeVerifier = sessionStorage.getItem('code_verifier')
 
     const payload = {
       method: 'POST',
@@ -186,11 +186,11 @@ const MusicDiscovery = () => {
 
       if (data.access_token) {
         const expiryTime = Date.now() + (data.expires_in * 1000)
-        window.localStorage.setItem('spotify_token', data.access_token)
-        window.localStorage.setItem('spotify_token_expiry', expiryTime.toString())
+        sessionStorage.setItem('spotify_token', data.access_token)
+        sessionStorage.setItem('spotify_token_expiry', expiryTime.toString())
         
         if (data.refresh_token) {
-          window.localStorage.setItem('spotify_refresh_token', data.refresh_token)
+          sessionStorage.setItem('spotify_refresh_token', data.refresh_token)
         }
 
         setSpotifyToken(data.access_token)
@@ -213,7 +213,7 @@ const MusicDiscovery = () => {
     const hashed = await sha256(codeVerifier)
     const codeChallenge = base64encode(hashed)
 
-    window.localStorage.setItem('code_verifier', codeVerifier)
+    sessionStorage.setItem('code_verifier', codeVerifier)
 
     const params = new URLSearchParams({
       client_id: SPOTIFY_CLIENT_ID,
@@ -331,8 +331,8 @@ const MusicDiscovery = () => {
 
       if (profileResponse.status === 401) {
         // Token expired
-        window.localStorage.removeItem('spotify_token')
-        window.localStorage.removeItem('spotify_token_expiry')
+        sessionStorage.removeItem('spotify_token')
+        sessionStorage.removeItem('spotify_token_expiry')
         setSpotifyToken(null)
         setIsConnected(false)
         setIsLoading(false)
