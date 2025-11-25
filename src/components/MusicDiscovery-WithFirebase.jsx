@@ -9,6 +9,8 @@ const MusicDiscovery = () => {
   const [userId, setUserId] = useState(null)
   const [currentView, setCurrentView] = useState('discover') // discover, stats
   const [discoveryMode, setDiscoveryMode] = useState(50) // 0-100, 0=familiar, 100=exploratory
+  const [tempDiscoveryMode, setTempDiscoveryMode] = useState(50) // Temporary value while sliding
+  const [isAdjustingSlider, setIsAdjustingSlider] = useState(false) // Track if user is actively sliding
   const [selectedGenres, setSelectedGenres] = useState(['all']) // Selected genre filters
   const [showGenreFilter, setShowGenreFilter] = useState(false) // Show/hide genre dropdown
   const [showFilters, setShowFilters] = useState(true) // Show/hide entire filters section
@@ -1003,18 +1005,44 @@ const MusicDiscovery = () => {
     }
   }
 
+  // Handle slider interaction start (mouse down or touch start)
+  const handleSliderStart = () => {
+    setIsAdjustingSlider(true)
+  }
+
+  // Handle slider value change (while dragging)
+  const handleSliderChange = (e) => {
+    const value = Number(e.target.value)
+    setTempDiscoveryMode(value)
+  }
+
+  // Handle slider interaction end (mouse up or touch end)
+  const handleSliderEnd = (e) => {
+    const value = Number(e.target.value)
+    setDiscoveryMode(value) // Commit the final value
+    setTempDiscoveryMode(value)
+    setIsAdjustingSlider(false)
+  }
+
   // Update recommendations when discovery mode or genre filters change (with debounce)
   useEffect(() => {
-    if (isConnected && userStats?.topArtists && spotifyToken) {
+    if (isConnected && userStats?.topArtists && spotifyToken && !isAdjustingSlider) {
       console.log('Discovery mode or genres changed:', discoveryMode, selectedGenres)
       const timeoutId = setTimeout(() => {
         console.log('Fetching new recommendations for discovery mode:', discoveryMode, 'genres:', selectedGenres)
         getRecommendations(userStats.topArtists, spotifyToken)
-      }, 500) // Wait 500ms after user stops making changes
+      }, 1000) // Wait 1000ms (1 second) after user stops making changes
       
       return () => clearTimeout(timeoutId)
     }
-  }, [discoveryMode, selectedGenres, isConnected, userStats, spotifyToken])
+  }, [discoveryMode, selectedGenres, isConnected, userStats, spotifyToken, isAdjustingSlider])
+
+  // Sync tempDiscoveryMode with discoveryMode when not adjusting
+  useEffect(() => {
+    if (!isAdjustingSlider) {
+      setTempDiscoveryMode(discoveryMode)
+    }
+  }, [discoveryMode, isAdjustingSlider])
 
   // Login view
   if (!isConnected) {
@@ -1337,10 +1365,10 @@ const MusicDiscovery = () => {
                           fill="none"
                           stroke="#1DB954"
                           strokeWidth="20"
-                          strokeDasharray={`${(discoveryMode / 100) * 502.65} 502.65`}
+                          strokeDasharray={`${((isAdjustingSlider ? tempDiscoveryMode : discoveryMode) / 100) * 502.65} 502.65`}
                           strokeLinecap="round"
                           transform="rotate(-90 100 100)"
-                          style={{ transition: 'stroke-dasharray 0.3s ease' }}
+                          style={{ transition: isAdjustingSlider ? 'none' : 'stroke-dasharray 0.3s ease' }}
                         />
                         {/* Center Circle */}
                         <circle
@@ -1359,7 +1387,7 @@ const MusicDiscovery = () => {
                           fontSize="32"
                           fontWeight="700"
                         >
-                          {discoveryMode}%
+                          {isAdjustingSlider ? tempDiscoveryMode : discoveryMode}%
                         </text>
                       </svg>
                     </div>
@@ -1369,8 +1397,12 @@ const MusicDiscovery = () => {
                       type="range"
                       min="0"
                       max="100"
-                      value={discoveryMode}
-                      onChange={(e) => setDiscoveryMode(Number(e.target.value))}
+                      value={isAdjustingSlider ? tempDiscoveryMode : discoveryMode}
+                      onMouseDown={handleSliderStart}
+                      onTouchStart={handleSliderStart}
+                      onChange={handleSliderChange}
+                      onMouseUp={handleSliderEnd}
+                      onTouchEnd={handleSliderEnd}
                       className="dial-input"
                     />
 
