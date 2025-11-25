@@ -246,7 +246,7 @@ body {
 
 /* Discovery View */
 .discover-view {
-  max-width: 700px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
 }
@@ -274,6 +274,163 @@ body {
 /* Collapsible Filters Wrapper */
 .discovery-controls-wrapper {
   margin-bottom: 2rem;
+}
+
+/* Two Column Layout */
+.discovery-main-layout {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+/* Left Column - Track */
+.track-column-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.track-card-vertical {
+  background: #181818;
+  border-radius: 1.5rem;
+  padding: 2rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+  border: 1px solid #282828;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.album-art-large {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+}
+
+.album-art-large img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.track-info {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Right Column - Controls */
+.controls-column-right {
+  display: flex;
+  flex-direction: column;
+}
+
+.discovery-controls-card {
+  background: #181818;
+  border-radius: 1.5rem;
+  padding: 2rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+  border: 1px solid #282828;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  height: fit-content;
+  position: sticky;
+  top: 100px;
+}
+
+.genre-filter-container-new {
+  position: relative;
+}
+
+/* Dial Container */
+.dial-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 0;
+}
+
+.dial-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+  color: #1DB954;
+  font-size: 1.1rem;
+}
+
+.dial-wrapper {
+  width: 200px;
+  height: 200px;
+  position: relative;
+}
+
+.dial-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 4px 15px rgba(29, 185, 84, 0.3));
+}
+
+.dial-input {
+  width: 100%;
+  height: 8px;
+  border-radius: 5px;
+  background: linear-gradient(to right, #282828 0%, #1DB954 100%);
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+  margin-top: 1rem;
+}
+
+.dial-input::-webkit-slider-thumb {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #1DB954;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(29, 185, 84, 0.6);
+  border: 3px solid #000;
+  transition: all 0.2s;
+}
+
+.dial-input::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 16px rgba(29, 185, 84, 0.8);
+}
+
+.dial-input::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #1DB954;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(29, 185, 84, 0.6);
+  border: 3px solid #000;
+  transition: all 0.2s;
+}
+
+.dial-input::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 4px 16px rgba(29, 185, 84, 0.8);
+}
+
+.dial-labels {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.dial-label-text {
+  font-size: 0.875rem;
+  color: #b3b3b3;
+  font-weight: 600;
 }
 
 .filters-toggle-button {
@@ -1195,6 +1352,30 @@ body {
   .discover-view,
   .stats-view {
     padding: 1rem;
+  }
+
+  /* Stack columns on mobile */
+  .discovery-main-layout {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .controls-column-right {
+    order: -1; /* Put controls above track on mobile */
+  }
+
+  .discovery-controls-card {
+    position: relative;
+    top: 0;
+  }
+
+  .dial-wrapper {
+    width: 180px;
+    height: 180px;
+  }
+
+  .track-card-vertical {
+    padding: 1.5rem;
   }
 
   /* Make track card vertical on mobile */
