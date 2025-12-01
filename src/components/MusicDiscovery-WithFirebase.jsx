@@ -36,6 +36,9 @@ const MusicDiscovery = () => {
   
   // Cache for artist genre data
   const [artistGenreCache, setArtistGenreCache] = useState({})
+  
+  // Cache filtered and scored tracks to avoid re-fetching on slider change
+  const [cachedScoredTracks, setCachedScoredTracks] = useState([])
 
   // Spotify API config
   const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID
@@ -791,50 +794,11 @@ const MusicDiscovery = () => {
         fromTopArtist: t.hasTopArtist
       })))
       
-      // Use the prioritized track list
-      const prioritizedTracks = scoredTracks.map(t => t.track)
-
-      // Based on discovery mode, select tracks
-      // 0 = Most recent/familiar songs
-      // 50 = Mix of recent and random
-      // 100 = Completely random/exploratory
-      let selectedTracks = []
+      // Cache the scored tracks for instant slider updates
+      setCachedScoredTracks(scoredTracks)
       
-      const availableTracks = [...prioritizedTracks]
-      
-      // Use as many tracks as possible (up to all of them)
-      const maxTracks = Math.min(availableTracks.length, 100) // Allow up to 100 recommendations
-      
-      if (discoveryMode === 0) {
-        // 0% exploratory - prioritized order (best matches first)
-        selectedTracks = availableTracks.slice(0, maxTracks)
-        console.log(`🎯 Discovery mode: 0% - Using ${selectedTracks.length} prioritized tracks`)
-      } else if (discoveryMode === 100) {
-        // 100% exploratory - completely random
-        selectedTracks = availableTracks
-          .sort(() => Math.random() - 0.5)
-          .slice(0, maxTracks)
-        console.log(`🎲 Discovery mode: 100% - Completely randomized ${selectedTracks.length} tracks`)
-      } else {
-        // Mixed mode - blend prioritized and random based on percentage
-        const numPrioritized = Math.floor(maxTracks * (1 - discoveryMode / 100))
-        const numRandom = maxTracks - numPrioritized
-        
-        console.log(`🎚️ Discovery mode: ${discoveryMode}% - ${numPrioritized} prioritized + ${numRandom} random`)
-        
-        // Take some prioritized tracks (from top artists, less heard)
-        const prioritizedPicks = availableTracks.slice(0, numPrioritized)
-        
-        // Take some random tracks (excluding the ones we already picked)
-        const remainingTracks = availableTracks.slice(numPrioritized)
-        const randomPicks = remainingTracks
-          .sort(() => Math.random() - 0.5)
-          .slice(0, numRandom)
-        
-        // Combine and shuffle
-        selectedTracks = [...prioritizedPicks, ...randomPicks]
-          .sort(() => Math.random() - 0.5)
-      }
+      // Apply discovery mode to select tracks
+      const selectedTracks = applyDiscoveryMode(scoredTracks, discoveryMode)
 
       console.log(`✅ Final recommendation pool: ${selectedTracks.length} tracks available`)
       console.log('🎵 First 3 tracks:', selectedTracks.slice(0, 3).map(t => `${t.name} - ${t.artists?.[0]?.name}`).join(' | '))
@@ -1003,18 +967,80 @@ const MusicDiscovery = () => {
     }
   }
 
-  // Update recommendations when discovery mode or genre filters change (with debounce)
+  // Apply discovery mode to cached tracks (INSTANT - no fetching)
+  const applyDiscoveryMode = (scoredTracks, mode) => {
+    if (scoredTracks.length === 0) return []
+    
+    const maxTracks = Math.min(scoredTracks.length, 100)
+    let selectedTracks = []
+    
+    if (mode === 0) {
+      // 0% exploratory - prioritized order (best matches first)
+      selectedTracks = scoredTracks.slice(0, maxTracks)
+      console.log(`🎯 Discovery mode: 0% - Using ${selectedTracks.length} prioritized tracks`)
+    } else if (mode === 100) {
+      // 100% exploratory - completely random
+      selectedTracks = [...scoredTracks]
+        .sort(() => Math.random() - 0.5)
+        .slice(0, maxTracks)
+      console.log(`🎲 Discovery mode: 100% - Completely randomized ${selectedTracks.length} tracks`)
+    } else {
+      // Mixed mode - blend prioritized and random based on percentage
+      const numPrioritized = Math.floor(maxTracks * (1 - mode / 100))
+      const numRandom = maxTracks - numPrioritized
+      
+      console.log(`🎚️ Discovery mode: ${mode}% - ${numPrioritized} prioritized + ${numRandom} random`)
+      
+      // Take some prioritized tracks (from top artists, less heard)
+      const prioritizedPicks = scoredTracks.slice(0, numPrioritized)
+      
+      // Take some random tracks (excluding the ones we already picked)
+      const remainingTracks = scoredTracks.slice(numPrioritized)
+      const randomPicks = remainingTracks
+        .sort(() => Math.random() - 0.5)
+        .slice(0, numRandom)
+      
+      // Combine and shuffle
+      selectedTracks = [...prioritizedPicks, ...randomPicks]
+        .sort(() => Math.random() - 0.5)
+    }
+    
+    return selectedTracks.map(st => st.track)
+  }
+
+  // Update recommendations when discovery mode changes (INSTANT)
+  useEffect(() => {
+    if (cachedScoredTracks.length > 0 && isConnected) {
+      console.log('⚡ INSTANT UPDATE - Discovery mode changed:', discoveryMode, '- applying instantly to', cachedScoredTracks.length, 'cached tracks')
+      const newRecommendations = applyDiscoveryMode(cachedScoredTracks, discoveryMode)
+      console.log('⚡ Generated', newRecommendations.length, 'recommendations instantly')
+      setRecommendations(newRecommendations)
+      if (newRecommendations.length > 0) {
+        setCurrentTrack(newRecommendations[0])
+        console.log('⚡ New track set:', newRecommendations[0].name)
+      }
+    } else {
+      console.log('⚠️ Cannot do instant update - cachedScoredTracks:', cachedScoredTracks.length, 'isConnected:', isConnected)
+    }
+  }, [discoveryMode])
+  
+  // Update recommendations when genre filters change (requires re-fetch)
   useEffect(() => {
     if (isConnected && userStats?.topArtists && spotifyToken) {
-      console.log('Discovery mode or genres changed:', discoveryMode, selectedGenres)
+      console.log('🎭 Genre filter changed:', selectedGenres)
+      setIsLoading(true) // Show loading state immediately
       const timeoutId = setTimeout(() => {
-        console.log('Fetching new recommendations for discovery mode:', discoveryMode, 'genres:', selectedGenres)
+        console.log('Fetching new recommendations for genres:', selectedGenres)
         getRecommendations(userStats.topArtists, spotifyToken)
-      }, 500) // Wait 500ms after user stops making changes
+          .finally(() => setIsLoading(false))
+      }, 150) // Reduced from 300ms to 150ms
       
-      return () => clearTimeout(timeoutId)
+      return () => {
+        clearTimeout(timeoutId)
+        setIsLoading(false)
+      }
     }
-  }, [discoveryMode, selectedGenres, isConnected, userStats, spotifyToken])
+  }, [selectedGenres, isConnected, userStats, spotifyToken])
 
   // Login view
   if (!isConnected) {
@@ -1244,6 +1270,14 @@ const MusicDiscovery = () => {
           {/* Current Track Card */}
           {currentTrack ? (
             <div className="track-card-new">
+              {/* Loading overlay */}
+              {isLoading && (
+                <div className="track-loading-overlay">
+                  <Music size={48} className="spinning" />
+                  <p>Loading...</p>
+                </div>
+              )}
+              
               {/* Horizontal Layout: Photo Left, Info Right */}
               <div className="track-card-horizontal">
                 {/* Album Art - Left Side */}
