@@ -41,8 +41,9 @@ const MusicDiscovery = () => {
   const [cachedScoredTracks, setCachedScoredTracks] = useState([])
 
   // Spotify API config
-  const SPOTIFY_CLIENT_ID = '317c65a797af484fb3e2af110acdfd72' // Your client ID
-  const REDIRECT_URI = 'https://www.tuneswipe.xyz'
+  // Using environment variables - set in .env file
+  const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID || '317c65a797af484fb3e2af110acdfd72' // Fallback for local dev
+  const REDIRECT_URI = import.meta.env.VITE_REDIRECT_URI || 'https://www.tuneswipe.xyz'
   const SPOTIFY_AUTH_ENDPOINT = 'https://accounts.spotify.com/authorize'
   const SPOTIFY_TOKEN_ENDPOINT = 'https://accounts.spotify.com/api/token'
   const SPOTIFY_SCOPES = [
