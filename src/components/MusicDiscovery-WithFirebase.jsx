@@ -1175,69 +1175,71 @@ const MusicDiscovery = () => {
             <p className="discovery-message">{getDiscoveryMessage()}</p>
           </div>
 
-          {/* Collapsible Discovery Controls */}
-          <div className="discovery-controls-wrapper">
-            <button 
-              className="filters-toggle-button"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Sliders size={18} />
-              <span>Filters</span>
-              {showFilters ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-            </button>
+          {/* Main content grid - side by side */}
+          <div className="discovery-main-content">
+            {/* Collapsible Discovery Controls */}
+            <div className="discovery-controls-wrapper">
+              <button 
+                className="filters-toggle-button"
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                <Sliders size={18} />
+                <span>Filters</span>
+                {showFilters ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
 
-            {showFilters && (
-              <div className="discovery-controls">
-                {/* Discovery Mode Slider */}
-                <div className="slider-container">
-                  <div className="slider-labels">
-                    <span>Familiar</span>
-                    <span className="slider-percentage">{discoveryMode}% exploratory</span>
-                    <span>Exploratory</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={discoveryMode}
-                    onChange={(e) => setDiscoveryMode(Number(e.target.value))}
-                    className="discovery-slider"
-                  />
-                </div>
-
-                {/* Genre Filter Dropdown */}
-                <div className="genre-filter-container">
-                  <button 
-                    className="genre-filter-button"
-                    onClick={() => setShowGenreFilter(!showGenreFilter)}
-                  >
-                    <Sliders size={18} />
-                    <span>Genre Filter</span>
-                    <span className="selected-count">
-                      {selectedGenres.includes('all') ? 'All' : `${selectedGenres.length}`}
-                    </span>
-                    <span className={`dropdown-arrow ${showGenreFilter ? 'open' : ''}`}>▼</span>
-                  </button>
-                  
-                  {showGenreFilter && (
-                    <div className="genre-dropdown">
-                      <div className="genre-tags-filter">
-                        {availableGenres.map(genre => (
-                          <button
-                            key={genre}
-                            className={`genre-tag-filter ${selectedGenres.includes(genre) ? 'active' : ''}`}
-                            onClick={() => toggleGenre(genre)}
-                          >
-                            {genre === 'all' ? '✓ All' : genre}
-                          </button>
-                        ))}
-                      </div>
+              {showFilters && (
+                <div className="discovery-controls">
+                  {/* Discovery Mode Slider */}
+                  <div className="slider-container">
+                    <div className="slider-labels">
+                      <span>Familiar</span>
+                      <span className="slider-percentage">{discoveryMode}% exploratory</span>
+                      <span>Exploratory</span>
                     </div>
-                  )}
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={discoveryMode}
+                      onChange={(e) => setDiscoveryMode(Number(e.target.value))}
+                      className="discovery-slider"
+                    />
+                  </div>
+
+                  {/* Genre Filter Dropdown */}
+                  <div className="genre-filter-container">
+                    <button 
+                      className="genre-filter-button"
+                      onClick={() => setShowGenreFilter(!showGenreFilter)}
+                    >
+                      <Sliders size={18} />
+                      <span>Genre Filter</span>
+                      <span className="selected-count">
+                        {selectedGenres.includes('all') ? 'All' : `${selectedGenres.length}`}
+                      </span>
+                      <span className={`dropdown-arrow ${showGenreFilter ? 'open' : ''}`}>▼</span>
+                    </button>
+                    
+                    {showGenreFilter && (
+                      <div className="genre-dropdown">
+                        <div className="genre-tags-filter">
+                          {availableGenres.map(genre => (
+                            <button
+                              key={genre}
+                              className={`genre-tag-filter ${selectedGenres.includes(genre) ? 'active' : ''}`}
+                              onClick={() => toggleGenre(genre)}
+                            >
+                              {genre === 'all' ? '✓ All' : genre}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
           {/* Current Track Card */}
           {currentTrack ? (
@@ -1344,6 +1346,8 @@ const MusicDiscovery = () => {
               <p>Loading recommendations...</p>
             </div>
           )}
+          </div>
+          {/* End of discovery-main-content grid */}
 
           {/* Preference Summary */}
           <div className="preference-summary">
