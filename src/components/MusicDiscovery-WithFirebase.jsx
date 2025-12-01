@@ -9,8 +9,6 @@ const MusicDiscovery = () => {
   const [userId, setUserId] = useState(null)
   const [currentView, setCurrentView] = useState('discover') // discover, stats
   const [discoveryMode, setDiscoveryMode] = useState(50) // 0-100, 0=familiar, 100=exploratory
-  const [tempDiscoveryMode, setTempDiscoveryMode] = useState(50) // Temporary value while sliding
-  const [isAdjustingSlider, setIsAdjustingSlider] = useState(false) // Track if user is actively sliding
   const [selectedGenres, setSelectedGenres] = useState(['all']) // Selected genre filters
   const [showGenreFilter, setShowGenreFilter] = useState(false) // Show/hide genre dropdown
   const [showFilters, setShowFilters] = useState(true) // Show/hide entire filters section
@@ -1005,44 +1003,18 @@ const MusicDiscovery = () => {
     }
   }
 
-  // Handle slider interaction start (mouse down or touch start)
-  const handleSliderStart = () => {
-    setIsAdjustingSlider(true)
-  }
-
-  // Handle slider value change (while dragging)
-  const handleSliderChange = (e) => {
-    const value = Number(e.target.value)
-    setTempDiscoveryMode(value)
-  }
-
-  // Handle slider interaction end (mouse up or touch end)
-  const handleSliderEnd = (e) => {
-    const value = Number(e.target.value)
-    setDiscoveryMode(value) // Commit the final value
-    setTempDiscoveryMode(value)
-    setIsAdjustingSlider(false)
-  }
-
   // Update recommendations when discovery mode or genre filters change (with debounce)
   useEffect(() => {
-    if (isConnected && userStats?.topArtists && spotifyToken && !isAdjustingSlider) {
+    if (isConnected && userStats?.topArtists && spotifyToken) {
       console.log('Discovery mode or genres changed:', discoveryMode, selectedGenres)
       const timeoutId = setTimeout(() => {
         console.log('Fetching new recommendations for discovery mode:', discoveryMode, 'genres:', selectedGenres)
         getRecommendations(userStats.topArtists, spotifyToken)
-      }, 1000) // Wait 1000ms (1 second) after user stops making changes
+      }, 500) // Wait 500ms after user stops making changes
       
       return () => clearTimeout(timeoutId)
     }
-  }, [discoveryMode, selectedGenres, isConnected, userStats, spotifyToken, isAdjustingSlider])
-
-  // Sync tempDiscoveryMode with discoveryMode when not adjusting
-  useEffect(() => {
-    if (!isAdjustingSlider) {
-      setTempDiscoveryMode(discoveryMode)
-    }
-  }, [discoveryMode, isAdjustingSlider])
+  }, [discoveryMode, selectedGenres, isConnected, userStats, spotifyToken])
 
   // Login view
   if (!isConnected) {
@@ -1203,112 +1175,40 @@ const MusicDiscovery = () => {
             <p className="discovery-message">{getDiscoveryMessage()}</p>
           </div>
 
-          {/* Two Column Layout: Song Left, Controls Right */}
-          {currentTrack ? (
-            <div className="discovery-main-layout">
-              {/* LEFT COLUMN - Current Track */}
-              <div className="track-column-left">
-                <div className="track-card-vertical">
-                  {/* Album Art */}
-                  <div className="album-art-large">
-                    {currentTrack.album?.images && currentTrack.album.images[0] ? (
-                      <img src={currentTrack.album.images[0].url} alt={currentTrack.name} className="album-image" />
-                    ) : (
-                      <div className="placeholder-image">
-                        <Music size={80} />
-                      </div>
-                    )}
-                  </div>
+          {/* Main content grid - side by side */}
+          <div className="discovery-main-content">
+            {/* Collapsible Discovery Controls */}
+            <div className="discovery-controls-wrapper">
+              <button 
+                className="filters-toggle-button"
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                <Sliders size={18} />
+                <span>Filters</span>
+                {showFilters ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
 
-                  {/* Track Details */}
-                  <div className="track-info">
-                    <h2 className="song-title">{currentTrack.name}</h2>
-                    <h3 className="artist-name">{currentTrack.artists ? currentTrack.artists.map(a => a.name).join(', ') : ''}</h3>
-                    <p className="album-name">{currentTrack.album?.name}</p>
-                    
-                    {/* Stats */}
-                    {currentTrack.popularity && (
-                      <div className="popularity-stat">
-                        <TrendingUp size={18} />
-                        <span>{currentTrack.popularity}/100</span>
-                      </div>
-                    )}
-                    
-                    {/* Open in Spotify Link */}
-                    <button
-                      className="spotify-link-btn"
-                      onClick={() => window.open(currentTrack.external_urls?.spotify || `https://open.spotify.com/track/${currentTrack.id}`, '_blank')}
-                      title="Open in Spotify"
-                    >
-                      🎵 Open in Spotify
-                    </button>
-                  </div>
-
-                  {/* Playback Progress Slider with Controls */}
-                  <div className="playback-progress-section">
-                    <div className="playback-controls-row">
-                      {/* Play/Pause Button */}
-                      <button 
-                        className="play-button-control"
-                        onClick={togglePlayback}
-                        disabled={!playerReady}
-                        title={isPlaying ? "Pause" : "Play"}
-                      >
-                        {isPlaying ? '⏸' : '▶'}
-                      </button>
-                      
-                      {/* Progress Slider and Time */}
-                      <div className="progress-container">
-                        <div className="progress-info">
-                          <span className="time-current">{formatTime(currentPosition)}</span>
-                          <span className="time-total">{formatTime(trackDuration)}</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max={trackDuration || 100}
-                          value={currentPosition}
-                          onChange={handleSeek}
-                          className="progress-slider"
-                          disabled={!playerReady || !isPlaying}
-                          title="Seek through track (Premium required)"
-                        />
-                      </div>
+              {showFilters && (
+                <div className="discovery-controls">
+                  {/* Discovery Mode Slider */}
+                  <div className="slider-container">
+                    <div className="slider-labels">
+                      <span>Familiar</span>
+                      <span className="slider-percentage">{discoveryMode}% exploratory</span>
+                      <span>Exploratory</span>
                     </div>
-                    
-                    {!playerReady && (
-                      <p className="playback-note">
-                        Web playback requires Spotify Premium • Use "Open in Spotify" to listen
-                      </p>
-                    )}
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={discoveryMode}
+                      onChange={(e) => setDiscoveryMode(Number(e.target.value))}
+                      className="discovery-slider"
+                    />
                   </div>
 
-                  {/* Large Reaction Buttons */}
-                  <div className="reaction-buttons-bottom">
-                    <button 
-                      className="reaction-btn-xlarge dislike-btn-xlarge"
-                      onClick={() => handleReaction('dislike')}
-                      title="Skip"
-                    >
-                      <X size={50} strokeWidth={3} />
-                    </button>
-                    
-                    <button 
-                      className="reaction-btn-xlarge like-btn-xlarge"
-                      onClick={() => handleReaction('like', true)}
-                      title="Like & Save"
-                    >
-                      <Check size={50} strokeWidth={3} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* RIGHT COLUMN - Discovery Controls with Dial */}
-              <div className="controls-column-right">
-                <div className="discovery-controls-card">
-                  {/* Genre Filter Dropdown - Above */}
-                  <div className="genre-filter-container-new">
+                  {/* Genre Filter Dropdown */}
+                  <div className="genre-filter-container">
                     <button 
                       className="genre-filter-button"
                       onClick={() => setShowGenreFilter(!showGenreFilter)}
@@ -1337,82 +1237,107 @@ const MusicDiscovery = () => {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+            </div>
 
-                  {/* Discovery Dial - Center */}
-                  <div className="dial-container">
-                    <label className="dial-label">
-                      <TrendingUp size={20} />
-                      Discovery Mode
-                    </label>
-                    
-                    {/* Circular Dial */}
-                    <div className="dial-wrapper">
-                      <svg className="dial-svg" viewBox="0 0 200 200">
-                        {/* Background Circle */}
-                        <circle
-                          cx="100"
-                          cy="100"
-                          r="80"
-                          fill="none"
-                          stroke="#282828"
-                          strokeWidth="20"
-                        />
-                        {/* Progress Arc */}
-                        <circle
-                          cx="100"
-                          cy="100"
-                          r="80"
-                          fill="none"
-                          stroke="#1DB954"
-                          strokeWidth="20"
-                          strokeDasharray={`${((isAdjustingSlider ? tempDiscoveryMode : discoveryMode) / 100) * 502.65} 502.65`}
-                          strokeLinecap="round"
-                          transform="rotate(-90 100 100)"
-                          style={{ transition: isAdjustingSlider ? 'none' : 'stroke-dasharray 0.3s ease' }}
-                        />
-                        {/* Center Circle */}
-                        <circle
-                          cx="100"
-                          cy="100"
-                          r="60"
-                          fill="#181818"
-                        />
-                        {/* Percentage Text */}
-                        <text
-                          x="100"
-                          y="100"
-                          textAnchor="middle"
-                          dominantBaseline="central"
-                          fill="#1DB954"
-                          fontSize="32"
-                          fontWeight="700"
-                        >
-                          {isAdjustingSlider ? tempDiscoveryMode : discoveryMode}%
-                        </text>
-                      </svg>
+          {/* Current Track Card */}
+          {currentTrack ? (
+            <div className="track-card-new">
+              {/* Horizontal Layout: Photo Left, Info Right */}
+              <div className="track-card-horizontal">
+                {/* Album Art - Left Side */}
+                <div className="album-art-left">
+                  {currentTrack.album?.images && currentTrack.album.images[0] ? (
+                    <img src={currentTrack.album.images[0].url} alt={currentTrack.name} className="album-image" />
+                  ) : (
+                    <div className="placeholder-image">
+                      <Music size={80} />
                     </div>
+                  )}
+                </div>
 
-                    {/* Dial Input Slider (Hidden) */}
+                {/* Track Details - Right Side */}
+                <div className="track-details-right">
+                  <h2 className="song-title">{currentTrack.name}</h2>
+                  <h3 className="artist-name">{currentTrack.artists ? currentTrack.artists.map(a => a.name).join(', ') : ''}</h3>
+                  <p className="album-name">{currentTrack.album?.name}</p>
+                  
+                  {/* Stats */}
+                  {currentTrack.popularity && (
+                    <div className="popularity-stat">
+                      <TrendingUp size={18} />
+                      <span>{currentTrack.popularity}/100</span>
+                    </div>
+                  )}
+                  
+                  {/* Open in Spotify Link */}
+                  <button
+                    className="spotify-link-btn"
+                    onClick={() => window.open(currentTrack.external_urls?.spotify || `https://open.spotify.com/track/${currentTrack.id}`, '_blank')}
+                    title="Open in Spotify"
+                  >
+                    🎵 Open in Spotify
+                  </button>
+                </div>
+              </div>
+
+              {/* Playback Progress Slider with Controls */}
+              <div className="playback-progress-section">
+                <div className="playback-controls-row">
+                  {/* Play/Pause Button */}
+                  <button 
+                    className="play-button-control"
+                    onClick={togglePlayback}
+                    disabled={!playerReady}
+                    title={isPlaying ? "Pause" : "Play"}
+                  >
+                    {isPlaying ? '⏸' : '▶'}
+                  </button>
+                  
+                  {/* Progress Slider and Time */}
+                  <div className="progress-container">
+                    <div className="progress-info">
+                      <span className="time-current">{formatTime(currentPosition)}</span>
+                      <span className="time-total">{formatTime(trackDuration)}</span>
+                    </div>
                     <input
                       type="range"
                       min="0"
-                      max="100"
-                      value={isAdjustingSlider ? tempDiscoveryMode : discoveryMode}
-                      onMouseDown={handleSliderStart}
-                      onTouchStart={handleSliderStart}
-                      onChange={handleSliderChange}
-                      onMouseUp={handleSliderEnd}
-                      onTouchEnd={handleSliderEnd}
-                      className="dial-input"
+                      max={trackDuration || 100}
+                      value={currentPosition}
+                      onChange={handleSeek}
+                      className="progress-slider"
+                      disabled={!playerReady || !isPlaying}
+                      title="Seek through track (Premium required)"
                     />
-
-                    {/* Labels */}
-                    <div className="dial-labels">
-                      <span className="dial-label-text">Familiar</span>
-                      <span className="dial-label-text">Exploratory</span>
-                    </div>
                   </div>
                 </div>
+                
+                {!playerReady && (
+                  <p className="playback-note">
+                    Web playback requires Spotify Premium • Use "Open in Spotify" to listen
+                  </p>
+                )}
+              </div>
+
+              {/* Large Reaction Buttons - Bottom */}
+              <div className="reaction-buttons-bottom">
+                <button 
+                  className="reaction-btn-xlarge dislike-btn-xlarge"
+                  onClick={() => handleReaction('dislike')}
+                  title="Skip"
+                >
+                  <X size={50} strokeWidth={3} />
+                </button>
+                
+                <button 
+                  className="reaction-btn-xlarge like-btn-xlarge"
+                  onClick={() => handleReaction('like', true)}
+                  title="Like & Save"
+                >
+                  <Check size={50} strokeWidth={3} />
+                </button>
               </div>
             </div>
           ) : (
@@ -1421,6 +1346,8 @@ const MusicDiscovery = () => {
               <p>Loading recommendations...</p>
             </div>
           )}
+          </div>
+          {/* End of discovery-main-content grid */}
 
           {/* Preference Summary */}
           <div className="preference-summary">
