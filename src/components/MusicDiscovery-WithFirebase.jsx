@@ -1384,15 +1384,26 @@ const MusicDiscovery = () => {
           </div>
           {/* End of discovery-main-content grid */}
 
-          {/* Audio Visualizer Bars */}
-          <div className="audio-visualizer">
+          {/* Audio Visualizer Bars - Reactive to playback */}
+          <div className={`audio-visualizer ${isPlaying ? 'playing' : 'paused'}`}>
             <div className="visualizer-bar" style={{ '--delay': '0s', '--height': '60%' }}></div>
-            <div className="visualizer-bar" style={{ '--delay': '0.1s', '--height': '40%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.05s', '--height': '40%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.1s', '--height': '75%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.15s', '--height': '50%' }}></div>
             <div className="visualizer-bar" style={{ '--delay': '0.2s', '--height': '80%' }}></div>
-            <div className="visualizer-bar" style={{ '--delay': '0.3s', '--height': '50%' }}></div>
-            <div className="visualizer-bar" style={{ '--delay': '0.4s', '--height': '70%' }}></div>
-            <div className="visualizer-bar" style={{ '--delay': '0.5s', '--height': '45%' }}></div>
-            <div className="visualizer-bar" style={{ '--delay': '0.6s', '--height': '65%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.25s', '--height': '45%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.3s', '--height': '70%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.35s', '--height': '55%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.4s', '--height': '65%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.45s', '--height': '48%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.5s', '--height': '72%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.55s', '--height': '52%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.6s', '--height': '68%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.65s', '--height': '58%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.7s', '--height': '76%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.75s', '--height': '44%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.8s', '--height': '62%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.85s', '--height': '54%' }}></div>
           </div>
 
           {/* Preference Summary */}

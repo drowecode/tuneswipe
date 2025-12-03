@@ -1089,27 +1089,42 @@ body {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: 0.5rem;
-  height: 100px;
-  padding: 2rem 0;
-  margin: 2rem 0 1.5rem 0;
+  gap: 0.4rem;
+  height: 80px;
+  padding: 1.5rem 0;
+  margin: 1.5rem 0 1rem 0;
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .visualizer-bar {
-  width: 12px;
+  width: 8px;
   height: var(--height, 50%);
-  background: linear-gradient(to top, #1DB954 0%, #1ed760 50%, #ff6b6b 100%);
-  border-radius: 6px;
-  animation: visualizerPulse 1.2s ease-in-out infinite;
-  animation-delay: var(--delay, 0s);
-  box-shadow: 0 0 15px rgba(29, 185, 84, 0.5);
+  background: linear-gradient(to top, #1DB954 0%, #1ed760 100%);
+  border-radius: 4px;
   transition: all 0.3s ease;
+  box-shadow: 0 0 10px rgba(29, 185, 84, 0.3);
+}
+
+/* Paused state - bars stay still at low height */
+.audio-visualizer.paused .visualizer-bar {
+  animation: none;
+  height: 20%;
+  opacity: 0.4;
+}
+
+/* Playing state - bars animate */
+.audio-visualizer.playing .visualizer-bar {
+  animation: visualizerPulse 1s ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+  opacity: 1;
 }
 
 @keyframes visualizerPulse {
   0%, 100% {
     transform: scaleY(0.3);
-    opacity: 0.6;
+    opacity: 0.7;
   }
   50% {
     transform: scaleY(1);
@@ -1118,8 +1133,8 @@ body {
 }
 
 .visualizer-bar:hover {
-  box-shadow: 0 0 25px rgba(29, 185, 84, 0.8);
-  transform: scaleY(1.1);
+  box-shadow: 0 0 20px rgba(29, 185, 84, 0.6);
+  transform: scaleY(1.05);
 }
 
 /* Preference Summary */
