@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Heart, ThumbsUp, Meh, ThumbsDown, TrendingUp, Music, User, BarChart3, Sliders, Plus, Check, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Heart, ThumbsUp, Meh, ThumbsDown, TrendingUp, Music, User, BarChart3, Sliders, Plus, Check, X, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import './MusicDiscovery.css'
 import { createUserProfile, savePreference, getUserPreferences, onAuthChange } from './firebase'
 
