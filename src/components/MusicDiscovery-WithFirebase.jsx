@@ -531,17 +531,16 @@ const MusicDiscovery = () => {
         
         animationFrameId = requestAnimationFrame(updateVisualizerFromAnalysis)
       }
-    }
 
-    updateVisualizerFromAnalysis()
+      updateVisualizerFromAnalysis()
 
-    return () => {
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId)
+      return () => {
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId)
+        }
       }
-    }
+    } 
   }
-    
     // FALLBACK: If no audio analysis available, use simulation
     else {
       console.log('🎵 Visualizer starting with SIMULATED data (audio analysis unavailable)')
@@ -1458,7 +1457,8 @@ const MusicDiscovery = () => {
         console.log('🧹 Cleared previous track switch timeout')
       }
     }
-  }, [discoveryMode, cachedScoredTracks, isConnected, deviceId, playerReady])
+  }, [discoveryMode])  // ONLY trigger when discoveryMode changes!
+  
   
   // Update recommendations when genre filters change (requires re-fetch)
   useEffect(() => {
