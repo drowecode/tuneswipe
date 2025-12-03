@@ -176,6 +176,41 @@ const MusicDiscovery = () => {
     return () => clearInterval(interval)
   }, [player, isPlaying])
 
+  // Auto-advance to next track when current song ends
+  useEffect(() => {
+    // Only check when playing and we have valid duration/position
+    if (!isPlaying || !trackDuration || trackDuration <= 0) return
+    
+    const timeRemaining = trackDuration - currentPosition
+    
+    // Check if we're within the last 2 seconds of the track
+    if (timeRemaining > 0 && timeRemaining <= 2000) {
+      console.log(`⏱️ ${Math.floor(timeRemaining / 1000)}s remaining, preparing next track...`)
+      
+      // Set a timeout to advance when track actually ends
+      const advanceTimeout = setTimeout(() => {
+        console.log('🎵 Track ended, advancing to next...')
+        
+        const currentIndex = recommendations.findIndex(track => 
+          track.id === currentTrack?.id
+        )
+        
+        if (currentIndex >= 0 && currentIndex < recommendations.length - 1) {
+          const nextTrack = recommendations[currentIndex + 1]
+          setCurrentTrack(nextTrack)
+          
+          if (nextTrack.uri && deviceId && playerReady) {
+            playTrack(nextTrack.uri)
+          }
+        } else {
+          console.log('📝 Reached end of recommendations')
+        }
+      }, timeRemaining) // Wait exactly until track ends
+      
+      return () => clearTimeout(advanceTimeout)
+    }
+  }, [currentPosition, trackDuration, isPlaying])  // Only depend on position/duration/playing
+
   // Setup Web Audio API for real-time visualization
   useEffect(() => {
     if (!isPlaying || !audioContext) return
@@ -1390,11 +1425,15 @@ const MusicDiscovery = () => {
     
     // Update UI to show first track from new order
     if (newRecommendations.length > 0) {
-      setCurrentTrack(newRecommendations[0])
+      const newTrack = newRecommendations[0]
+      setCurrentTrack(newTrack)
+      
+      // If music is currently playing, switch to the new track
+      if (isPlaying && newTrack.uri && deviceId && playerReady) {
+        console.log('🎵 Discovery changed while playing - switching to:', newTrack.name)
+        playTrack(newTrack.uri)
+      }
     }
-    
-    // DON'T auto-play - let user click play or use buttons
-    // This prevents unwanted song switching
     
   }, [discoveryMode])  // ONLY trigger when slider moves
   
