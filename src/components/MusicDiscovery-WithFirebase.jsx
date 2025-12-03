@@ -444,64 +444,59 @@ const MusicDiscovery = () => {
             const visualizerData = new Uint8Array(18)
             
             for (let i = 0; i < 18; i++) {
-            // Map 18 bars to 12 timbre values
-            const timbreIndex = Math.floor(i * segment.timbre.length / 18)
-            let timbreValue = segment.timbre[timbreIndex]
+              // Map 18 bars to 12 timbre values
+              const timbreIndex = Math.floor(i * segment.timbre.length / 18)
+              let timbreValue = segment.timbre[timbreIndex]
+              
+              // Normalize timbre (-100 to 100) to 0-255
+              // Add offset to make visualization more prominent
+              let normalized = ((timbreValue + 100) / 200) * 255
+              
+              // Apply loudness scaling
+              // loudness_max is typically -60 to 0 dB
+              const loudnessFactor = Math.max(0, (segment.loudness_max + 60) / 60)
+              normalized = normalized * (0.4 + loudnessFactor * 0.6)
+              
+              // Bass boost for first 6 bars
+              if (i < 6) {
+                normalized = Math.min(255, normalized * 1.3)
+              }
+              
+              // Treble reduction for last 6 bars
+              if (i >= 12) {
+                normalized = normalized * 0.8
+              }
+              
+              visualizerData[i] = Math.max(0, Math.min(255, normalized))
+            }
+          
+            // Check if we're on a beat for extra boost
+            const onBeat = audioAnalysis.beats?.some(beat => 
+              Math.abs(beat.start - positionSeconds) < 0.05
+            )
             
-            // Normalize timbre (-100 to 100) to 0-255
-            // Add offset to make visualization more prominent
-            let normalized = ((timbreValue + 100) / 200) * 255
-            
-            // Apply loudness scaling
-            // loudness_max is typically -60 to 0 dB
-            const loudnessFactor = Math.max(0, (segment.loudness_max + 60) / 60)
-            normalized = normalized * (0.4 + loudnessFactor * 0.6)
-            
-            // Bass boost for first 6 bars
-            if (i < 6) {
-              normalized = Math.min(255, normalized * 1.3)
+            if (onBeat) {
+              // Boost all bars briefly on beat
+              for (let i = 0; i < 18; i++) {
+                visualizerData[i] = Math.min(255, visualizerData[i] * 1.2)
+              }
             }
             
-            // Treble reduction for last 6 bars
-            if (i >= 12) {
-              normalized = normalized * 0.8
-            }
-            
-            visualizerData[i] = Math.max(0, Math.min(255, normalized))
-          }
-          
-          // Check if we're on a beat for extra boost
-          const onBeat = audioAnalysis.beats?.some(beat => 
-            Math.abs(beat.start - positionSeconds) < 0.05
-          )
-          
-          if (onBeat) {
-            // Boost all bars briefly on beat
+            setFrequencyData(visualizerData)
+          } else {
+            // No segment found, gentle fallback
+            const fallbackData = new Uint8Array(18)
             for (let i = 0; i < 18; i++) {
-              visualizerData[i] = Math.min(255, visualizerData[i] * 1.2)
+              fallbackData[i] = 40 + Math.random() * 40
             }
+            setFrequencyData(fallbackData)
           }
           
-          setFrequencyData(visualizerData)
-        } else {
-          // No segment found, gentle fallback
-          const fallbackData = new Uint8Array(18)
-          for (let i = 0; i < 18; i++) {
-            fallbackData[i] = 40 + Math.random() * 40
-          }
-          setFrequencyData(fallbackData)
+          animationFrameId = requestAnimationFrame(updateVisualizerFromAnalysis)
         }
-        
-        animationFrameId = requestAnimationFrame(updateVisualizerFromAnalysis)
       }
 
       updateVisualizerFromAnalysis()
-
-      return () => {
-        if (animationFrameId) {
-          cancelAnimationFrame(animationFrameId)
-        }
-      }
     } 
     // FALLBACK: If no audio analysis available, use simulation
     else {
@@ -529,11 +524,12 @@ const MusicDiscovery = () => {
       }
       
       generateSimulatedData()
-      
-      return () => {
-        if (animationFrameId) {
-          cancelAnimationFrame(animationFrameId)
-        }
+    }
+
+    // Single cleanup function for both cases
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId)
       }
     }
   }, [isPlaying, audioAnalysis, currentPosition])
