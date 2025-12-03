@@ -414,43 +414,6 @@ const MusicDiscovery = () => {
     }
   }, [currentTrack?.id, spotifyToken])
 
-  // Sync currentTrack with actual player state to prevent mismatches
-  useEffect(() => {
-    if (!player) return
-
-    const stateListener = (state) => {
-      if (!state) return
-      
-      // Get the actual track playing in the Spotify player
-      const playingTrack = state.track_window?.current_track
-      
-      if (playingTrack && currentTrack) {
-        // Check if UI track matches actual playing track
-        const uiTrackId = currentTrack.id
-        const playerTrackId = playingTrack.id
-        
-        if (uiTrackId !== playerTrackId) {
-          console.log('⚠️ Track mismatch detected!')
-          console.log('UI shows:', currentTrack.name, 'by', currentTrack.artists?.[0]?.name)
-          console.log('Player playing:', playingTrack.name, 'by', playingTrack.artists?.[0]?.name)
-          
-          // Find the matching track in recommendations
-          const matchingTrack = recommendations.find(t => t.id === playerTrackId)
-          if (matchingTrack) {
-            console.log('🔄 Syncing UI to match player')
-            setCurrentTrack(matchingTrack)
-          }
-        }
-      }
-    }
-
-    player.addListener('player_state_changed', stateListener)
-    
-    return () => {
-      player.removeListener('player_state_changed', stateListener)
-    }
-  }, [player, currentTrack, recommendations])
-
   // Update visualizer with REAL Spotify Audio Analysis data (or fallback to simulation)
   useEffect(() => {
     if (!isPlaying) {
@@ -540,7 +503,6 @@ const MusicDiscovery = () => {
         }
       }
     } 
-  }
     // FALLBACK: If no audio analysis available, use simulation
     else {
       console.log('🎵 Visualizer starting with SIMULATED data (audio analysis unavailable)')
@@ -1422,42 +1384,26 @@ const MusicDiscovery = () => {
 
   // Update recommendations when discovery mode changes (INSTANT)
   useEffect(() => {
-    let switchTimeout
+    // Skip if no cached tracks
+    if (cachedScoredTracks.length === 0 || !isConnected) {
+      return
+    }
+
+    console.log('⚡ Discovery mode changed:', discoveryMode)
     
-    if (cachedScoredTracks.length > 0 && isConnected) {
-      console.log('⚡ INSTANT UPDATE - Discovery mode changed:', discoveryMode, '- applying instantly to', cachedScoredTracks.length, 'cached tracks')
-      const newRecommendations = applyDiscoveryMode(cachedScoredTracks, discoveryMode)
-      console.log('⚡ Generated', newRecommendations.length, 'recommendations instantly')
-      setRecommendations(newRecommendations)
-      
-      if (newRecommendations.length > 0) {
-        const newTrack = newRecommendations[0]
-        setCurrentTrack(newTrack)
-        console.log('⚡ New track set:', newTrack.name)
-        
-        // Only auto-play the new track if user has stopped adjusting slider
-        // This prevents audio from switching rapidly while dragging slider
-        switchTimeout = setTimeout(() => {
-          if (newTrack.uri && deviceId && playerReady) {
-            console.log('🎵 Playing new track after discovery mode change:', newTrack.name)
-            playTrack(newTrack.uri)
-          } else {
-            console.log('⚠️ Cannot play track - deviceId:', deviceId, 'playerReady:', playerReady)
-          }
-        }, 500) // Wait 500ms after last slider change
-      }
-    } else {
-      console.log('⚠️ Cannot do instant update - cachedScoredTracks:', cachedScoredTracks.length, 'isConnected:', isConnected)
+    // Apply new discovery mode to get new track order
+    const newRecommendations = applyDiscoveryMode(cachedScoredTracks, discoveryMode)
+    setRecommendations(newRecommendations)
+    
+    // Update UI to show first track from new order
+    if (newRecommendations.length > 0) {
+      setCurrentTrack(newRecommendations[0])
     }
     
-    // Cleanup function runs on every re-render and unmount
-    return () => {
-      if (switchTimeout) {
-        clearTimeout(switchTimeout)
-        console.log('🧹 Cleared previous track switch timeout')
-      }
-    }
-  }, [discoveryMode])  // ONLY trigger when discoveryMode changes!
+    // DON'T auto-play - let user click play or use buttons
+    // This prevents unwanted song switching
+    
+  }, [discoveryMode])  // ONLY trigger when slider moves
   
   
   // Update recommendations when genre filters change (requires re-fetch)
