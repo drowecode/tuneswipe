@@ -1408,14 +1408,14 @@ const MusicDiscovery = () => {
         console.log('Fetching new recommendations for genres:', selectedGenres)
         getRecommendations(userStats.topArtists, spotifyToken)
           .finally(() => setIsLoading(false))
-      }, 150) // Reduced from 300ms to 150ms
+      }, 150)
       
       return () => {
         clearTimeout(timeoutId)
         setIsLoading(false)
       }
     }
-  }, [selectedGenres, isConnected, userStats, spotifyToken])
+  }, [selectedGenres])  // ONLY trigger when genres change, not when userStats/token change!
 
   // Login view
   if (!isConnected) {
