@@ -1177,14 +1177,11 @@ const MusicDiscovery = () => {
         setRecommendations(selectedTracks)
         setCurrentTrack(selectedTracks[0])
         
-        // Try to auto-play the first track (will fail gracefully if no premium)
-        if (selectedTracks[0].uri && deviceId) {
-          setTimeout(() => {
-            playTrack(selectedTracks[0].uri)
-          }, 1000)
-        }
+        // DON'T auto-play - let user click the play button
+        // This prevents unwanted auto-switching
         
         console.log(`🎉 Successfully loaded: "${selectedTracks[0].name}" by ${selectedTracks[0].artists[0].name}`)
+        console.log('👉 Click the play button to start listening!')
       } else {
         alert('No tracks available. Try playing more music on Spotify!')
       }
