@@ -1847,22 +1847,74 @@ const MusicDiscovery = () => {
           <div className="stats-header">
             <h2>Your Music Profile</h2>
             <p className="stats-subtitle">Based on your last 4 weeks of listening on Spotify</p>
-            <p className="total-scrobbles">Data updates daily • Powered by Spotify</p>
+            <p className="stats-update-info">Data updates daily • Powered by Spotify</p>
+            <button 
+              className="refresh-stats-button"
+              onClick={async () => {
+                setIsLoading(true)
+                try {
+                  const topArtists = await fetch('https://api.spotify.com/v1/me/top/artists?limit=50&time_range=short_term', {
+                    headers: { 'Authorization': `Bearer ${spotifyToken}` }
+                  }).then(r => r.json())
+                  
+                  const topTracks = await fetch('https://api.spotify.com/v1/me/top/tracks?limit=50&time_range=short_term', {
+                    headers: { 'Authorization': `Bearer ${spotifyToken}` }
+                  }).then(r => r.json())
+                  
+                  // Process genres
+                  const genreCount = {}
+                  topArtists.items.forEach(artist => {
+                    artist.genres?.forEach(genre => {
+                      genreCount[genre] = (genreCount[genre] || 0) + 1
+                    })
+                  })
+                  const topGenres = Object.entries(genreCount)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([name, count]) => ({ name, count }))
+                  
+                  setUserStats({
+                    topArtists: topArtists.items,
+                    topTracks: topTracks.items,
+                    topGenres
+                  })
+                  
+                  console.log('✅ Stats refreshed successfully')
+                } catch (error) {
+                  console.error('Error refreshing stats:', error)
+                  alert('Failed to refresh stats. Please try again.')
+                } finally {
+                  setIsLoading(false)
+                }
+              }}
+              disabled={isLoading}
+            >
+              <RefreshCw size={18} />
+              {isLoading ? 'Refreshing...' : 'Refresh Stats'}
+            </button>
           </div>
 
           {/* Time Period Info Card */}
           <div className="stats-info-card">
             <div className="info-item">
-              <span className="info-label">📊 Time Period</span>
-              <span className="info-value">Last 4 weeks (short_term)</span>
+              <span className="info-icon">📊</span>
+              <div className="info-content">
+                <span className="info-label">Time Period</span>
+                <span className="info-value">Last 4 weeks (short_term)</span>
+              </div>
             </div>
             <div className="info-item">
-              <span className="info-label">🎵 Data Source</span>
-              <span className="info-value">Spotify Listening History</span>
+              <span className="info-icon">🎵</span>
+              <div className="info-content">
+                <span className="info-label">Data Source</span>
+                <span className="info-value">Spotify Listening History</span>
+              </div>
             </div>
             <div className="info-item">
-              <span className="info-label">🔄 Updates</span>
-              <span className="info-value">Real-time from your account</span>
+              <span className="info-icon">🔄</span>
+              <div className="info-content">
+                <span className="info-label">Updates</span>
+                <span className="info-value">Real-time from your account</span>
+              </div>
             </div>
           </div>
 
