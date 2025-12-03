@@ -7,6 +7,7 @@ const MusicDiscovery = () => {
   const [isConnected, setIsConnected] = useState(false)
   const [spotifyToken, setSpotifyToken] = useState(null)
   const [userId, setUserId] = useState(null)
+  const [tokenExpiresAt, setTokenExpiresAt] = useState(null)
   const [currentView, setCurrentView] = useState('discover') // discover, stats
   const [discoveryMode, setDiscoveryMode] = useState(50) // 0-100, 0=familiar, 100=exploratory
   const [selectedGenres, setSelectedGenres] = useState(['all']) // Selected genre filters
@@ -62,7 +63,9 @@ const MusicDiscovery = () => {
     'user-read-email',
     'user-read-private',
     'user-modify-playback-state',
-    'user-read-playback-state'
+    'user-read-playback-state',
+    'user-read-currently-playing',  // For Audio Analysis API
+    'user-read-playback-position'   // For Audio Analysis API
   ]
 
   // PKCE helper functions
@@ -252,6 +255,67 @@ const MusicDiscovery = () => {
     }
   }, [player])
 
+  // Refresh Spotify access token
+  const refreshAccessToken = async () => {
+    const refreshToken = localStorage.getItem('spotify_refresh_token')
+    if (!refreshToken) {
+      console.error('❌ No refresh token available')
+      return null
+    }
+
+    try {
+      console.log('🔄 Refreshing access token...')
+      const response = await fetch(SPOTIFY_TOKEN_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+          client_id: SPOTIFY_CLIENT_ID
+        })
+      })
+
+      const data = await response.json()
+      
+      if (data.access_token) {
+        const expiryTime = Date.now() + (data.expires_in * 1000)
+        localStorage.setItem('spotify_token', data.access_token)
+        localStorage.setItem('spotify_token_expiry', expiryTime.toString())
+        
+        if (data.refresh_token) {
+          localStorage.setItem('spotify_refresh_token', data.refresh_token)
+        }
+        
+        setSpotifyToken(data.access_token)
+        setTokenExpiresAt(expiryTime)
+        console.log('✅ Token refreshed successfully')
+        return data.access_token
+      } else {
+        console.error('❌ No access token in refresh response')
+        return null
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing token:', error)
+      return null
+    }
+  }
+
+  // Check if token is expired
+  const isTokenExpired = () => {
+    const expiryTime = localStorage.getItem('spotify_token_expiry')
+    if (!expiryTime) return false
+    return Date.now() >= parseInt(expiryTime) - (5 * 60 * 1000) // Refresh 5 min before expiry
+  }
+
+  // Get valid token (refresh if needed)
+  const getValidToken = async () => {
+    if (isTokenExpired()) {
+      console.log('⏰ Token expired or expiring soon, refreshing...')
+      return await refreshAccessToken()
+    }
+    return spotifyToken
+  }
+
   // Fetch Spotify Audio Analysis for current track
   const fetchAudioAnalysis = async (trackId) => {
     // Check cache first
@@ -262,15 +326,61 @@ const MusicDiscovery = () => {
     }
 
     try {
-      console.log('📊 Fetching audio analysis for track:', trackId)
+      // Get valid token (will refresh if expired)
+      const token = await getValidToken()
+      if (!token) {
+        console.error('❌ No valid token available')
+        return null
+      }
+
+      // Clean track ID (remove spotify:track: prefix if present)
+      const cleanId = trackId.replace('spotify:track:', '').trim()
+      
+      console.log('📊 Fetching audio analysis for track:', cleanId)
+      console.log('   Using token:', token.substring(0, 20) + '...')
+      
       const response = await fetch(
-        `https://api.spotify.com/v1/audio-analysis/${trackId}`,
+        `https://api.spotify.com/v1/audio-analysis/${cleanId}`,
         {
-          headers: { 'Authorization': `Bearer ${spotifyToken}` }
+          headers: { 'Authorization': `Bearer ${token}` }
         }
       )
 
+      console.log('   Response status:', response.status)
+
+      if (response.status === 401 || response.status === 403) {
+        console.warn('⚠️ Got 401/403, attempting token refresh...')
+        const newToken = await refreshAccessToken()
+        
+        if (newToken) {
+          console.log('   Retrying with refreshed token...')
+          // Retry with new token
+          const retryResponse = await fetch(
+            `https://api.spotify.com/v1/audio-analysis/${cleanId}`,
+            { headers: { 'Authorization': `Bearer ${newToken}` } }
+          )
+          
+          console.log('   Retry response status:', retryResponse.status)
+          
+          if (retryResponse.ok) {
+            const data = await retryResponse.json()
+            console.log('✅ Success after token refresh! Segments:', data.segments?.length)
+            setAnalysisCache(prev => ({ ...prev, [trackId]: data }))
+            setAudioAnalysis(data)
+            return data
+          }
+        }
+        
+        console.warn('⚠️ Audio Analysis API returned 403 - Using simulated visualization instead')
+        console.warn('This may be due to token scope limitations or API restrictions')
+        return null
+      }
+
       if (!response.ok) {
+        if (response.status === 403) {
+          console.warn('⚠️ Audio Analysis API returned 403 - Using simulated visualization instead')
+          console.warn('This may be due to token scope limitations. Visualizer will still work!')
+        }
         throw new Error(`HTTP ${response.status}`)
       }
 
@@ -286,7 +396,11 @@ const MusicDiscovery = () => {
       setAudioAnalysis(data)
       return data
     } catch (error) {
-      console.error('❌ Error fetching audio analysis:', error)
+      if (error.message.includes('403')) {
+        console.warn('⚠️ Falling back to simulated visualization')
+      } else {
+        console.error('❌ Error fetching audio analysis:', error)
+      }
       return null
     }
   }
@@ -337,39 +451,36 @@ const MusicDiscovery = () => {
     }
   }, [player, currentTrack, recommendations])
 
-  // Update visualizer with REAL Spotify Audio Analysis data
+  // Update visualizer with REAL Spotify Audio Analysis data (or fallback to simulation)
   useEffect(() => {
-    if (!isPlaying || !audioAnalysis?.segments) {
-      // Reset to low values when paused or no data
+    if (!isPlaying) {
+      // Reset to low values when paused
       console.log('🎵 Visualizer paused - isPlaying:', isPlaying, 'hasAnalysis:', !!audioAnalysis?.segments)
       setFrequencyData(new Uint8Array(18).fill(0))
       return
     }
 
-    console.log('🎵 Visualizer starting - segments:', audioAnalysis.segments.length)
     let animationFrameId
 
-    const updateVisualizerFromAnalysis = () => {
-      if (isPlaying && audioAnalysis?.segments) {
-        const positionSeconds = currentPosition / 1000
-        
-        // Find current segment based on playback position
-        const segment = audioAnalysis.segments.find(s => 
-          positionSeconds >= s.start && 
-          positionSeconds < (s.start + s.duration)
-        )
-        
-        if (segment && segment.timbre) {
-          // Map timbre data (12 values) to our 18 bars
-          const visualizerData = new Uint8Array(18)
+    // If we have audio analysis, use it
+    if (audioAnalysis?.segments) {
+      console.log('🎵 Visualizer starting with REAL analysis - segments:', audioAnalysis.segments.length)
+      
+      const updateVisualizerFromAnalysis = () => {
+        if (isPlaying && audioAnalysis?.segments) {
+          const positionSeconds = currentPosition / 1000
           
-          // Timbre values typically range from -100 to +100
-          // Index 0-1: Sub-bass and bass
-          // Index 2-5: Low-mids
-          // Index 6-9: Mids  
-          // Index 10-11: Highs
+          // Find current segment based on playback position
+          const segment = audioAnalysis.segments.find(s => 
+            positionSeconds >= s.start && 
+            positionSeconds < (s.start + s.duration)
+          )
           
-          for (let i = 0; i < 18; i++) {
+          if (segment && segment.timbre) {
+            // Map timbre data (12 values) to our 18 bars
+            const visualizerData = new Uint8Array(18)
+            
+            for (let i = 0; i < 18; i++) {
             // Map 18 bars to 12 timbre values
             const timbreIndex = Math.floor(i * segment.timbre.length / 18)
             let timbreValue = segment.timbre[timbreIndex]
@@ -427,6 +538,41 @@ const MusicDiscovery = () => {
     return () => {
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
+      }
+    }
+  }
+    
+    // FALLBACK: If no audio analysis available, use simulation
+    else {
+      console.log('🎵 Visualizer starting with SIMULATED data (audio analysis unavailable)')
+      
+      const generateSimulatedData = () => {
+        if (isPlaying) {
+          const data = new Uint8Array(18)
+          
+          for (let i = 0; i < 18; i++) {
+            // Create varying heights with some randomness
+            const baseValue = 40 + Math.random() * 60
+            const boost = Math.sin(Date.now() / 200 + i) * 40
+            const variation = Math.random() * 30
+            
+            // Bass frequencies tend to be stronger
+            const bassBoost = i < 6 ? 20 : 0
+            
+            data[i] = Math.min(255, Math.max(0, baseValue + boost + variation + bassBoost))
+          }
+          
+          setFrequencyData(data)
+          animationFrameId = requestAnimationFrame(generateSimulatedData)
+        }
+      }
+      
+      generateSimulatedData()
+      
+      return () => {
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId)
+        }
       }
     }
   }, [isPlaying, audioAnalysis, currentPosition])
