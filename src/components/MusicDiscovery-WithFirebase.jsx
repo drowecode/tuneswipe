@@ -300,14 +300,53 @@ const MusicDiscovery = () => {
     }
   }, [currentTrack?.id, spotifyToken])
 
+  // Sync currentTrack with actual player state to prevent mismatches
+  useEffect(() => {
+    if (!player) return
+
+    const stateListener = (state) => {
+      if (!state) return
+      
+      // Get the actual track playing in the Spotify player
+      const playingTrack = state.track_window?.current_track
+      
+      if (playingTrack && currentTrack) {
+        // Check if UI track matches actual playing track
+        const uiTrackId = currentTrack.id
+        const playerTrackId = playingTrack.id
+        
+        if (uiTrackId !== playerTrackId) {
+          console.log('⚠️ Track mismatch detected!')
+          console.log('UI shows:', currentTrack.name, 'by', currentTrack.artists?.[0]?.name)
+          console.log('Player playing:', playingTrack.name, 'by', playingTrack.artists?.[0]?.name)
+          
+          // Find the matching track in recommendations
+          const matchingTrack = recommendations.find(t => t.id === playerTrackId)
+          if (matchingTrack) {
+            console.log('🔄 Syncing UI to match player')
+            setCurrentTrack(matchingTrack)
+          }
+        }
+      }
+    }
+
+    player.addListener('player_state_changed', stateListener)
+    
+    return () => {
+      player.removeListener('player_state_changed', stateListener)
+    }
+  }, [player, currentTrack, recommendations])
+
   // Update visualizer with REAL Spotify Audio Analysis data
   useEffect(() => {
     if (!isPlaying || !audioAnalysis?.segments) {
       // Reset to low values when paused or no data
+      console.log('🎵 Visualizer paused - isPlaying:', isPlaying, 'hasAnalysis:', !!audioAnalysis?.segments)
       setFrequencyData(new Uint8Array(18).fill(0))
       return
     }
 
+    console.log('🎵 Visualizer starting - segments:', audioAnalysis.segments.length)
     let animationFrameId
 
     const updateVisualizerFromAnalysis = () => {
