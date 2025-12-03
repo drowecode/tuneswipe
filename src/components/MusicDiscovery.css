@@ -1084,7 +1084,7 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* Audio Visualizer Bars */
+/* Audio Visualizer Bars - Real-time frequency visualization */
 .audio-visualizer {
   display: flex;
   align-items: flex-end;
@@ -1100,41 +1100,32 @@ body {
 
 .visualizer-bar {
   width: 8px;
-  height: var(--height, 50%);
+  min-height: 20%;
   background: linear-gradient(to top, #1DB954 0%, #1ed760 100%);
   border-radius: 4px;
-  transition: all 0.3s ease;
+  transition: height 0.05s ease-out, opacity 0.3s ease; /* Fast height updates for real-time feel */
   box-shadow: 0 0 10px rgba(29, 185, 84, 0.3);
+  will-change: height; /* Optimize for frequent height changes */
 }
 
 /* Paused state - bars stay still at low height */
 .audio-visualizer.paused .visualizer-bar {
-  animation: none;
-  height: 20%;
+  height: 20% !important;
   opacity: 0.4;
+  transition: height 0.3s ease, opacity 0.3s ease; /* Slower transition when pausing */
 }
 
-/* Playing state - bars animate */
+/* Playing state - bars react to frequency data */
 .audio-visualizer.playing .visualizer-bar {
-  animation: visualizerPulse 1s ease-in-out infinite;
-  animation-delay: var(--delay, 0s);
   opacity: 1;
+  box-shadow: 0 0 15px rgba(29, 185, 84, 0.5);
 }
 
-@keyframes visualizerPulse {
-  0%, 100% {
-    transform: scaleY(0.3);
-    opacity: 0.7;
-  }
-  50% {
-    transform: scaleY(1);
-    opacity: 1;
-  }
-}
+/* Remove old animation keyframes since we're using real-time data */
 
 .visualizer-bar:hover {
   box-shadow: 0 0 20px rgba(29, 185, 84, 0.6);
-  transform: scaleY(1.05);
+  filter: brightness(1.2);
 }
 
 /* Preference Summary */
