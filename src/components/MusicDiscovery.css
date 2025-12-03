@@ -1084,11 +1084,49 @@ body {
   to { transform: rotate(360deg); }
 }
 
+/* Audio Visualizer Bars */
+.audio-visualizer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 100px;
+  padding: 2rem 0;
+  margin: 2rem 0 1.5rem 0;
+}
+
+.visualizer-bar {
+  width: 12px;
+  height: var(--height, 50%);
+  background: linear-gradient(to top, #1DB954 0%, #1ed760 50%, #ff6b6b 100%);
+  border-radius: 6px;
+  animation: visualizerPulse 1.2s ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+  box-shadow: 0 0 15px rgba(29, 185, 84, 0.5);
+  transition: all 0.3s ease;
+}
+
+@keyframes visualizerPulse {
+  0%, 100% {
+    transform: scaleY(0.3);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.visualizer-bar:hover {
+  box-shadow: 0 0 25px rgba(29, 185, 84, 0.8);
+  transform: scaleY(1.1);
+}
+
 /* Preference Summary */
 .preference-summary {
   display: flex;
   justify-content: center;
-  gap: 1.5rem;
+  gap: 3rem;
   background: #181818;
   padding: 1rem 1.5rem;
   border-radius: 1rem;
@@ -1102,10 +1140,10 @@ body {
   gap: 0.5rem;
   font-weight: 600;
   color: white;
+  font-size: 1rem;
 }
 
-.love-color { color: #1DB954; }
-.like-color { color: #1DB954; opacity: 0.7; }
+.like-color { color: #1DB954; }
 .dislike-color { color: #b3b3b3; }
 
 /* Stats View */

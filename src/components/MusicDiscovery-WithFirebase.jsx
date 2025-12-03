@@ -1384,12 +1384,19 @@ const MusicDiscovery = () => {
           </div>
           {/* End of discovery-main-content grid */}
 
+          {/* Audio Visualizer Bars */}
+          <div className="audio-visualizer">
+            <div className="visualizer-bar" style={{ '--delay': '0s', '--height': '60%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.1s', '--height': '40%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.2s', '--height': '80%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.3s', '--height': '50%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.4s', '--height': '70%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.5s', '--height': '45%' }}></div>
+            <div className="visualizer-bar" style={{ '--delay': '0.6s', '--height': '65%' }}></div>
+          </div>
+
           {/* Preference Summary */}
           <div className="preference-summary">
-            <div className="pref-stat">
-              <Heart size={20} className="love-color" />
-              <span>{userPreferences.loved.length} loved</span>
-            </div>
             <div className="pref-stat">
               <ThumbsUp size={20} className="like-color" />
               <span>{userPreferences.liked.length} liked</span>
