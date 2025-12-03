@@ -26,6 +26,8 @@ const MusicDiscovery = () => {
   const [audioContext, setAudioContext] = useState(null)
   const [audioAnalyzer, setAudioAnalyzer] = useState(null)
   const [frequencyData, setFrequencyData] = useState(new Uint8Array(18))
+  const [audioAnalysis, setAudioAnalysis] = useState(null) // Spotify Audio Analysis data
+  const [analysisCache, setAnalysisCache] = useState({}) // Cache analyses
   
   // User data
   const [userStats, setUserStats] = useState(null)
@@ -250,48 +252,146 @@ const MusicDiscovery = () => {
     }
   }, [player])
 
-  // Generate simulated frequency data when playing (since Spotify doesn't expose raw audio)
+  // Fetch Spotify Audio Analysis for current track
+  const fetchAudioAnalysis = async (trackId) => {
+    // Check cache first
+    if (analysisCache[trackId]) {
+      console.log('🎵 Using cached audio analysis for', trackId)
+      setAudioAnalysis(analysisCache[trackId])
+      return analysisCache[trackId]
+    }
+
+    try {
+      console.log('📊 Fetching audio analysis for track:', trackId)
+      const response = await fetch(
+        `https://api.spotify.com/v1/audio-analysis/${trackId}`,
+        {
+          headers: { 'Authorization': `Bearer ${spotifyToken}` }
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log('✅ Audio analysis loaded:', data.segments?.length, 'segments')
+      
+      // Cache the analysis
+      setAnalysisCache(prev => ({
+        ...prev,
+        [trackId]: data
+      }))
+      
+      setAudioAnalysis(data)
+      return data
+    } catch (error) {
+      console.error('❌ Error fetching audio analysis:', error)
+      return null
+    }
+  }
+
+  // Fetch audio analysis when current track changes
   useEffect(() => {
-    if (!isPlaying) {
-      // Reset to low values when paused
+    if (currentTrack?.id && spotifyToken) {
+      fetchAudioAnalysis(currentTrack.id)
+    } else {
+      setAudioAnalysis(null)
+    }
+  }, [currentTrack?.id, spotifyToken])
+
+  // Update visualizer with REAL Spotify Audio Analysis data
+  useEffect(() => {
+    if (!isPlaying || !audioAnalysis?.segments) {
+      // Reset to low values when paused or no data
       setFrequencyData(new Uint8Array(18).fill(0))
       return
     }
 
     let animationFrameId
 
-    const generateSimulatedData = () => {
-      if (isPlaying) {
-        // Generate realistic-looking frequency data
-        const bars = 18
-        const data = new Uint8Array(bars)
+    const updateVisualizerFromAnalysis = () => {
+      if (isPlaying && audioAnalysis?.segments) {
+        const positionSeconds = currentPosition / 1000
         
-        // Simulate bass (first 6 bars), mids (next 6), highs (last 6)
-        for (let i = 0; i < bars; i++) {
-          // Create varying heights with some randomness
-          const baseValue = 40 + Math.random() * 60
-          const boost = Math.sin(Date.now() / 200 + i) * 40
-          const variation = Math.random() * 30
+        // Find current segment based on playback position
+        const segment = audioAnalysis.segments.find(s => 
+          positionSeconds >= s.start && 
+          positionSeconds < (s.start + s.duration)
+        )
+        
+        if (segment && segment.timbre) {
+          // Map timbre data (12 values) to our 18 bars
+          const visualizerData = new Uint8Array(18)
           
-          // Bass frequencies tend to be stronger
-          const bassBoost = i < 6 ? 20 : 0
+          // Timbre values typically range from -100 to +100
+          // Index 0-1: Sub-bass and bass
+          // Index 2-5: Low-mids
+          // Index 6-9: Mids  
+          // Index 10-11: Highs
           
-          data[i] = Math.min(255, Math.max(0, baseValue + boost + variation + bassBoost))
+          for (let i = 0; i < 18; i++) {
+            // Map 18 bars to 12 timbre values
+            const timbreIndex = Math.floor(i * segment.timbre.length / 18)
+            let timbreValue = segment.timbre[timbreIndex]
+            
+            // Normalize timbre (-100 to 100) to 0-255
+            // Add offset to make visualization more prominent
+            let normalized = ((timbreValue + 100) / 200) * 255
+            
+            // Apply loudness scaling
+            // loudness_max is typically -60 to 0 dB
+            const loudnessFactor = Math.max(0, (segment.loudness_max + 60) / 60)
+            normalized = normalized * (0.4 + loudnessFactor * 0.6)
+            
+            // Bass boost for first 6 bars
+            if (i < 6) {
+              normalized = Math.min(255, normalized * 1.3)
+            }
+            
+            // Treble reduction for last 6 bars
+            if (i >= 12) {
+              normalized = normalized * 0.8
+            }
+            
+            visualizerData[i] = Math.max(0, Math.min(255, normalized))
+          }
+          
+          // Check if we're on a beat for extra boost
+          const onBeat = audioAnalysis.beats?.some(beat => 
+            Math.abs(beat.start - positionSeconds) < 0.05
+          )
+          
+          if (onBeat) {
+            // Boost all bars briefly on beat
+            for (let i = 0; i < 18; i++) {
+              visualizerData[i] = Math.min(255, visualizerData[i] * 1.2)
+            }
+          }
+          
+          setFrequencyData(visualizerData)
+        } else {
+          // No segment found, gentle fallback
+          const fallbackData = new Uint8Array(18)
+          for (let i = 0; i < 18; i++) {
+            fallbackData[i] = 40 + Math.random() * 40
+          }
+          setFrequencyData(fallbackData)
         }
         
-        setFrequencyData(data)
-        animationFrameId = requestAnimationFrame(generateSimulatedData)
+        animationFrameId = requestAnimationFrame(updateVisualizerFromAnalysis)
       }
     }
 
-    generateSimulatedData()
+    updateVisualizerFromAnalysis()
 
     return () => {
       if (animationFrameId) {
         cancelAnimationFrame(animationFrameId)
       }
     }
-  }, [isPlaying])
+  }, [isPlaying, audioAnalysis, currentPosition])
+
 
   // Exchange authorization code for access token
   const exchangeCodeForToken = async (code) => {
@@ -1138,19 +1238,42 @@ const MusicDiscovery = () => {
 
   // Update recommendations when discovery mode changes (INSTANT)
   useEffect(() => {
+    let switchTimeout
+    
     if (cachedScoredTracks.length > 0 && isConnected) {
       console.log('⚡ INSTANT UPDATE - Discovery mode changed:', discoveryMode, '- applying instantly to', cachedScoredTracks.length, 'cached tracks')
       const newRecommendations = applyDiscoveryMode(cachedScoredTracks, discoveryMode)
       console.log('⚡ Generated', newRecommendations.length, 'recommendations instantly')
       setRecommendations(newRecommendations)
+      
       if (newRecommendations.length > 0) {
-        setCurrentTrack(newRecommendations[0])
-        console.log('⚡ New track set:', newRecommendations[0].name)
+        const newTrack = newRecommendations[0]
+        setCurrentTrack(newTrack)
+        console.log('⚡ New track set:', newTrack.name)
+        
+        // Only auto-play the new track if user has stopped adjusting slider
+        // This prevents audio from switching rapidly while dragging slider
+        switchTimeout = setTimeout(() => {
+          if (newTrack.uri && deviceId && playerReady) {
+            console.log('🎵 Playing new track after discovery mode change:', newTrack.name)
+            playTrack(newTrack.uri)
+          } else {
+            console.log('⚠️ Cannot play track - deviceId:', deviceId, 'playerReady:', playerReady)
+          }
+        }, 500) // Wait 500ms after last slider change
       }
     } else {
       console.log('⚠️ Cannot do instant update - cachedScoredTracks:', cachedScoredTracks.length, 'isConnected:', isConnected)
     }
-  }, [discoveryMode])
+    
+    // Cleanup function runs on every re-render and unmount
+    return () => {
+      if (switchTimeout) {
+        clearTimeout(switchTimeout)
+        console.log('🧹 Cleared previous track switch timeout')
+      }
+    }
+  }, [discoveryMode, cachedScoredTracks, isConnected, deviceId, playerReady])
   
   // Update recommendations when genre filters change (requires re-fetch)
   useEffect(() => {
