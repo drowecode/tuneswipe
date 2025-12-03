@@ -179,7 +179,7 @@ const MusicDiscovery = () => {
   // Auto-advance to next track when current song ends
   useEffect(() => {
     // Only check when playing and we have valid duration/position
-    if (!isPlaying || !trackDuration || trackDuration <= 0) return
+    if (!isPlaying || !trackDuration || trackDuration <= 0 || !currentTrack) return
     
     const timeRemaining = trackDuration - currentPosition
     
@@ -190,26 +190,34 @@ const MusicDiscovery = () => {
       // Set a timeout to advance when track actually ends
       const advanceTimeout = setTimeout(() => {
         console.log('🎵 Track ended, advancing to next...')
+        console.log('Current track:', currentTrack?.name)
+        console.log('Recommendations count:', recommendations.length)
         
         const currentIndex = recommendations.findIndex(track => 
           track.id === currentTrack?.id
         )
         
+        console.log('Current index:', currentIndex)
+        
         if (currentIndex >= 0 && currentIndex < recommendations.length - 1) {
           const nextTrack = recommendations[currentIndex + 1]
+          console.log('Next track:', nextTrack.name)
           setCurrentTrack(nextTrack)
           
           if (nextTrack.uri && deviceId && playerReady) {
+            console.log('▶️ Playing next track...')
             playTrack(nextTrack.uri)
+          } else {
+            console.log('⚠️ Cannot play - deviceId:', deviceId, 'playerReady:', playerReady)
           }
         } else {
-          console.log('📝 Reached end of recommendations')
+          console.log('📝 Reached end of recommendations (index:', currentIndex, '/', recommendations.length - 1, ')')
         }
       }, timeRemaining) // Wait exactly until track ends
       
       return () => clearTimeout(advanceTimeout)
     }
-  }, [currentPosition, trackDuration, isPlaying])  // Only depend on position/duration/playing
+  }, [currentPosition, trackDuration, isPlaying, currentTrack, recommendations, deviceId, playerReady])  // Include all dependencies
 
   // Setup Web Audio API for real-time visualization
   useEffect(() => {
@@ -1838,13 +1846,35 @@ const MusicDiscovery = () => {
         <div className="stats-view">
           <div className="stats-header">
             <h2>Your Music Profile</h2>
-            <p className="total-scrobbles">Powered by Spotify</p>
+            <p className="stats-subtitle">Based on your last 4 weeks of listening on Spotify</p>
+            <p className="total-scrobbles">Data updates daily • Powered by Spotify</p>
+          </div>
+
+          {/* Time Period Info Card */}
+          <div className="stats-info-card">
+            <div className="info-item">
+              <span className="info-label">📊 Time Period</span>
+              <span className="info-value">Last 4 weeks (short_term)</span>
+            </div>
+            <div className="info-item">
+              <span className="info-label">🎵 Data Source</span>
+              <span className="info-value">Spotify Listening History</span>
+            </div>
+            <div className="info-item">
+              <span className="info-label">🔄 Updates</span>
+              <span className="info-value">Real-time from your account</span>
+            </div>
           </div>
 
           <div className="stats-grid">
             {/* Top Artists */}
             <div className="stat-section">
-              <h3>Top Artists</h3>
+              <h3>
+                <User size={20} />
+                Top Artists
+                <span className="stat-count">({userStats.topArtists.length} total)</span>
+              </h3>
+              <p className="stat-description">Your most listened-to artists in the past month</p>
               <div className="stat-list">
                 {userStats.topArtists.slice(0, 10).map((artist, index) => (
                   <div key={index} className="stat-item">
@@ -1863,7 +1893,12 @@ const MusicDiscovery = () => {
 
             {/* Top Tracks */}
             <div className="stat-section">
-              <h3>Top Tracks</h3>
+              <h3>
+                <Music size={20} />
+                Top Tracks
+                <span className="stat-count">({userStats.topTracks.length} total)</span>
+              </h3>
+              <p className="stat-description">Your most played songs this month</p>
               <div className="stat-list">
                 {userStats.topTracks.slice(0, 10).map((track, index) => (
                   <div key={index} className="stat-item">
@@ -1882,11 +1917,17 @@ const MusicDiscovery = () => {
 
             {/* Top Genres */}
             <div className="stat-section full-width">
-              <h3>Top Genres</h3>
+              <h3>
+                <BarChart3 size={20} />
+                Top Genres
+                <span className="stat-count">({userStats.topGenres.length} total)</span>
+              </h3>
+              <p className="stat-description">Genres based on your top artists</p>
               <div className="genre-tags">
                 {userStats.topGenres.map((genre, index) => (
                   <div key={index} className="genre-tag">
                     {genre.name}
+                    <span className="genre-count">{genre.count}</span>
                   </div>
                 ))}
               </div>
