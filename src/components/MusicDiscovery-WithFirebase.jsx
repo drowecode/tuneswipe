@@ -1493,15 +1493,16 @@ const MusicDiscovery = () => {
     if (newRecommendations.length > 0) {
       const newTrack = newRecommendations[0]
       
-      // Only switch track if it's actually different from current
-      if (currentTrack?.id !== newTrack.id) {
-        setCurrentTrack(newTrack)
-        
-        // If music is currently playing, switch to the new track
-        if (isPlaying && newTrack.uri && deviceId && playerReady) {
-          console.log('🎵 Discovery changed while playing - switching to:', newTrack.name)
-          playTrack(newTrack.uri)
-        }
+      // Always update currentTrack to the new first track
+      setCurrentTrack(newTrack)
+      
+      // If music is currently playing, switch to the new track
+      // (Always switch when slider moves, even if it happens to be same track)
+      if (isPlaying && newTrack.uri && deviceId && playerReady) {
+        console.log('🎵 Discovery changed while playing - switching to:', newTrack.name)
+        playTrack(newTrack.uri)
+      } else if (!isPlaying) {
+        console.log('⏸️ Music paused - UI updated but not playing new track')
       }
     }
     
