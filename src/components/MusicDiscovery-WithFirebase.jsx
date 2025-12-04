@@ -1278,11 +1278,15 @@ const MusicDiscovery = () => {
         setRecommendations(selectedTracks)
         setCurrentTrack(selectedTracks[0])
         
-        // DON'T auto-play - let user click the play button
-        // This prevents unwanted auto-switching
+        // If music is currently playing, switch to the new track
+        if (isPlaying && selectedTracks[0].uri && deviceId && playerReady) {
+          console.log('🎭 Genre filter changed while playing - switching to:', selectedTracks[0].name)
+          playTrack(selectedTracks[0].uri)
+        } else if (!isPlaying) {
+          console.log('⏸️ Music paused - new tracks loaded, click play to start')
+        }
         
         console.log(`🎉 Successfully loaded: "${selectedTracks[0].name}" by ${selectedTracks[0].artists[0].name}`)
-        console.log('👉 Click the play button to start listening!')
       } else {
         alert('No tracks available. Try playing more music on Spotify!')
       }
