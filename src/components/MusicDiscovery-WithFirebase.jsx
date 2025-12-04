@@ -95,10 +95,20 @@ const MusicDiscovery = () => {
     const storedToken = window.localStorage.getItem('spotify_token')
     const tokenExpiry = window.localStorage.getItem('spotify_token_expiry')
 
-    // Check if stored token is still valid
-    if (storedToken && tokenExpiry && Date.now() < parseInt(tokenExpiry)) {
+    // Check if stored token is still valid (with 5 minute buffer)
+    const expiryTime = tokenExpiry ? parseInt(tokenExpiry) : 0
+    const fiveMinutesFromNow = Date.now() + (5 * 60 * 1000)
+    
+    if (storedToken && expiryTime > fiveMinutesFromNow) {
+      console.log('✅ Using stored token (expires in', Math.round((expiryTime - Date.now()) / 60000), 'minutes)')
       setSpotifyToken(storedToken)
       fetchSpotifyUserData(storedToken)
+    } else if (storedToken && expiryTime <= fiveMinutesFromNow) {
+      // Token expired or expiring soon
+      console.log('⚠️ Token expired or expiring soon, clearing...')
+      localStorage.removeItem('spotify_token')
+      localStorage.removeItem('spotify_token_expiry')
+      localStorage.removeItem('code_verifier')
     } else if (code) {
       // Exchange code for token
       exchangeCodeForToken(code)
@@ -141,7 +151,14 @@ const MusicDiscovery = () => {
 
       newPlayer.addListener('authentication_error', ({ message }) => {
         console.error('Authentication Error:', message)
-        alert('Spotify authentication error. Please log out and log back in.')
+        // Token is invalid - clear it and force re-login
+        console.log('🔄 Token invalid, clearing and forcing re-login...')
+        localStorage.removeItem('spotify_token')
+        localStorage.removeItem('spotify_token_expiry')
+        localStorage.removeItem('code_verifier')
+        alert('Spotify authentication expired. Please log in again.')
+        // Force reload to trigger login
+        window.location.href = window.location.origin
       })
 
       newPlayer.addListener('account_error', ({ message }) => {
