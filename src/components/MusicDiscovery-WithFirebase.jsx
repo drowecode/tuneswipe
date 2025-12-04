@@ -913,6 +913,8 @@ const MusicDiscovery = () => {
       // Check if we have a track loaded
       const state = await player.getCurrentState()
       
+      console.log('🎛️ Toggle playback - current state:', state?.paused ? 'paused' : 'playing')
+      
       if (!state) {
         // No track loaded, start playing the current track
         console.log('No track loaded, starting playback...')
@@ -921,8 +923,9 @@ const MusicDiscovery = () => {
         }
       } else {
         // Track is loaded, toggle play/pause
+        console.log('Toggling play/pause...')
         await player.togglePlay()
-        console.log('Toggled playback')
+        console.log('✅ Toggled successfully to:', !state.paused ? 'paused' : 'playing')
       }
     } catch (error) {
       console.error('Error toggling playback:', error)
@@ -953,6 +956,7 @@ const MusicDiscovery = () => {
     try {
       await player.seek(seekPosition)
       setCurrentPosition(seekPosition)
+      console.log('⏩ Seeked to:', formatTime(seekPosition))
     } catch (error) {
       console.error('Error seeking:', error)
     }
@@ -1434,12 +1438,16 @@ const MusicDiscovery = () => {
     // Update UI to show first track from new order
     if (newRecommendations.length > 0) {
       const newTrack = newRecommendations[0]
-      setCurrentTrack(newTrack)
       
-      // If music is currently playing, switch to the new track
-      if (isPlaying && newTrack.uri && deviceId && playerReady) {
-        console.log('🎵 Discovery changed while playing - switching to:', newTrack.name)
-        playTrack(newTrack.uri)
+      // Only switch track if it's actually different from current
+      if (currentTrack?.id !== newTrack.id) {
+        setCurrentTrack(newTrack)
+        
+        // If music is currently playing, switch to the new track
+        if (isPlaying && newTrack.uri && deviceId && playerReady) {
+          console.log('🎵 Discovery changed while playing - switching to:', newTrack.name)
+          playTrack(newTrack.uri)
+        }
       }
     }
     
