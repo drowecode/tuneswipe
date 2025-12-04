@@ -131,6 +131,26 @@ const MusicDiscovery = () => {
       // Not Ready
       newPlayer.addListener('not_ready', ({ device_id }) => {
         console.log('Device has gone offline', device_id)
+        setPlayerReady(false)
+      })
+
+      // Error handling
+      newPlayer.addListener('initialization_error', ({ message }) => {
+        console.error('Initialization Error:', message)
+      })
+
+      newPlayer.addListener('authentication_error', ({ message }) => {
+        console.error('Authentication Error:', message)
+        alert('Spotify authentication error. Please log out and log back in.')
+      })
+
+      newPlayer.addListener('account_error', ({ message }) => {
+        console.error('Account Error:', message)
+        alert('Spotify Premium is required for playback.')
+      })
+
+      newPlayer.addListener('playback_error', ({ message }) => {
+        console.error('Playback Error:', message)
       })
 
       // Player state changed
@@ -143,7 +163,9 @@ const MusicDiscovery = () => {
 
       newPlayer.connect().then(success => {
         if (success) {
-          console.log('Successfully connected to Spotify Web Player')
+          console.log('✅ Successfully connected to Spotify Web Player')
+        } else {
+          console.error('❌ Failed to connect to Spotify Web Player')
         }
       })
 
@@ -883,15 +905,30 @@ const MusicDiscovery = () => {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        console.error('Play error:', errorData)
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Play error:', response.status, errorData)
         
-        // If premium required, inform user
+        // Handle specific errors
+        if (response.status === 429) {
+          alert('Rate limit reached. Please wait a moment and try again. Too many requests to Spotify.')
+          return
+        }
+        
         if (errorData.error?.reason === 'PREMIUM_REQUIRED') {
           alert('Spotify Premium is required to use the web player. You can still browse and like songs!')
+          return
+        }
+        
+        if (response.status === 404) {
+          console.error('Device not found. Attempting to reconnect...')
+          // Try to reconnect player
+          if (player) {
+            await player.connect()
+          }
+          return
         }
       } else {
-        console.log('Successfully started playback')
+        console.log('✅ Successfully started playback')
       }
     } catch (error) {
       console.error('Error playing track:', error)
