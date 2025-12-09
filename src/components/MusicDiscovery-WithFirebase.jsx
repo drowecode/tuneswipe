@@ -894,6 +894,18 @@ const MusicDiscovery = () => {
       return
     }
 
+    // Rate limit protection - prevent rapid successive calls
+    const now = Date.now()
+    const timeSinceLastPlay = now - (window.lastPlayTrackCall || 0)
+    
+    if (timeSinceLastPlay < 500) {
+      console.log('⚠️ Rate limit protection: Ignoring rapid playTrack call (', timeSinceLastPlay, 'ms since last)')
+      return
+    }
+    
+    window.lastPlayTrackCall = now
+    console.log('🎵 Playing track:', trackUri)
+
     try {
       // First, transfer playback to this device
       await fetch('https://api.spotify.com/v1/me/player', {
@@ -927,7 +939,8 @@ const MusicDiscovery = () => {
         
         // Handle specific errors
         if (response.status === 429) {
-          alert('Rate limit reached. Please wait a moment and try again. Too many requests to Spotify.')
+          alert('⚠️ Too many requests. Please wait 60 seconds before trying again.')
+          console.error('🛑 RATE LIMITED - Stop all actions and wait 60 seconds')
           return
         }
         
