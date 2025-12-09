@@ -151,14 +151,31 @@ const MusicDiscovery = () => {
 
       newPlayer.addListener('authentication_error', ({ message }) => {
         console.error('Authentication Error:', message)
+        
+        // Prevent multiple alerts - only show once
+        if (window.authErrorShown) {
+          console.log('Auth error already handled, skipping...')
+          return
+        }
+        window.authErrorShown = true
+        
         // Token is invalid - clear it and force re-login
         console.log('🔄 Token invalid, clearing and forcing re-login...')
         localStorage.removeItem('spotify_token')
         localStorage.removeItem('spotify_token_expiry')
         localStorage.removeItem('code_verifier')
+        
+        // Disconnect player to stop more errors
+        if (newPlayer) {
+          newPlayer.disconnect()
+        }
+        
         alert('Spotify authentication expired. Please log in again.')
+        
         // Force reload to trigger login
-        window.location.href = window.location.origin
+        setTimeout(() => {
+          window.location.href = window.location.origin
+        }, 100)
       })
 
       newPlayer.addListener('account_error', ({ message }) => {
@@ -950,10 +967,43 @@ const MusicDiscovery = () => {
         }
         
         if (response.status === 404) {
-          console.error('Device not found. Attempting to reconnect...')
+          console.error('❌ Device not found (404). Device may not be registered yet.')
+          console.log('🔄 Attempting to reconnect player...')
+          
           // Try to reconnect player
           if (player) {
-            await player.connect()
+            try {
+              await player.connect()
+              console.log('✅ Player reconnected, trying to play again in 2 seconds...')
+              
+              // Wait for device to register
+              setTimeout(async () => {
+                try {
+                  const retryResponse = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ uris: [trackUri] }),
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${spotifyToken}`
+                    }
+                  })
+                  
+                  if (retryResponse.ok) {
+                    console.log('✅ Successfully started playback after reconnect')
+                  } else {
+                    console.error('❌ Retry failed:', retryResponse.status)
+                    alert('Could not play track. Try refreshing the page.')
+                  }
+                } catch (retryError) {
+                  console.error('❌ Retry error:', retryError)
+                }
+              }, 2000)
+            } catch (connectError) {
+              console.error('❌ Failed to reconnect:', connectError)
+              alert('Player connection lost. Please refresh the page.')
+            }
+          } else {
+            alert('Player not available. Please refresh the page.')
           }
           return
         }
